@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WARDOTS_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+GODOT_DIR="${WARDOTS_ROOT}/.tools/godot"
+GODOT_BIN="${GODOT_DIR}/Godot_v4.7.1-stable_linux.x86_64"
+
+export XDG_DATA_HOME="${GODOT_DIR}/xdg-data"
+export XDG_CONFIG_HOME="${GODOT_DIR}/xdg-config"
+export XDG_CACHE_HOME="${GODOT_DIR}/xdg-cache"
+
+exec "${GODOT_BIN}" "$@"

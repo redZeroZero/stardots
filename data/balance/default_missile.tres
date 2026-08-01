@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="MissileProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/missile_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+launch_speed = 45.0
+cruise_speed = 120.0
+cruise_acceleration = 55.0
+cruise_turn_rate_degrees = 55.0
+terminal_seeker_range = 105.0
+terminal_speed = 250.0
+terminal_acceleration = 180.0
+terminal_turn_rate_degrees = 150.0
+maximum_lifetime = 10.0
+proximity_fuze_range = 28.0
+fragment_radius = 72.0
+maximum_damage = 85.0
+maximum_integrity = 45.0
+intercepted_fragment_radius = 36.0
+intercepted_maximum_damage = 20.0
+explosion_duration = 0.32

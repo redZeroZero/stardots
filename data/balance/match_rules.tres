@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MatchRules" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/match_rules.gd" id="1_rules"]
+
+[resource]
+script = ExtResource("1_rules")
+capture_radius = 86.0
+capture_time = 8.0
+relay_sensor_range = 520.0
+victory_hold_time = 30.0
+ai_decision_interval = 1.4

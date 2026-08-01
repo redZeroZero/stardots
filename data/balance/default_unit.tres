@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="UnitProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/unit_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+display_name = "Frégate lance-missiles"
+tactical_role = "FRÉGATE"
+crewed = true
+tactical_speed_limit = 95.0
+drive_acceleration = 48.0
+crew_safe_acceleration = 38.0
+maximum_angular_speed_degrees = 100.0
+angular_acceleration_degrees = 180.0
+arrival_radius = 5.0
+station_keeping_speed = 8.0
+preferred_turn_radius = 90.0
+turn_anticipation = 0.75
+sensor_range = 420.0
+active_sensor_range = 560.0
+active_emission_detection_range = 720.0
+active_sensor_heat_per_second = 4.0
+provides_fire_control = false
+fire_control_share_range = 0.0
+heat_capacity = 100.0
+initial_heat = 20.0
+passive_cooling_per_second = 2.5
+silent_cooling_multiplier = 0.2
+combat_cooling_multiplier = 2.0
+silent_radiator_signature = 0.05
+normal_radiator_signature = 0.15
+combat_radiator_signature = 0.45
+baseline_thermal_signature = 0.7
+stored_heat_signature_multiplier = 0.6
+engine_signature_multiplier = 0.8
+propulsion_heat_per_second = 6.0
+missile_launch_heat = 8.0
+missile_loading_heat_per_second = 1.5
+point_defense_heat_per_shot = 0.6
+weapon_overheat_threshold = 0.95
+automatic_thermal_control = true
+stationary_speed_threshold = 2.0
+combat_mode_hold_time = 6.0
+point_defense_range = 115.0
+point_defense_ammunition_capacity = 80
+point_defense_fire_interval = 0.14
+point_defense_projectile_speed = 330.0
+point_defense_projectile_lifetime = 0.5
+point_defense_projectile_damage = 9.0
+point_defense_projectile_hit_radius = 4.0
+point_defense_dispersion_degrees = 2.8
+maximum_hull = 100.0
+missile_launch_range = 900.0
+missile_capacity = 6
+missile_launcher_count = 2
+missile_loader_count = 1
+missile_loading_time = 4.0
+missile_launch_interval = 0.5
