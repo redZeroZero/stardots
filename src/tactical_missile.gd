@@ -46,7 +46,7 @@ func _physics_process(delta: float) -> void:
 
 	lifetime += delta
 	if lifetime >= profile.maximum_lifetime:
-		_detonate(true)
+		_finish_without_impact()
 		return
 
 	var target_is_valid := is_instance_valid(target)
@@ -75,7 +75,7 @@ func _physics_process(delta: float) -> void:
 	rotation = direction.angle() + PI * 0.5
 
 	if target_is_valid and global_position.distance_to(target.global_position) <= profile.proximity_fuze_range:
-		_detonate(false)
+		_detonate(false, true)
 	elif global_position.distance_to(last_known_position) <= 3.0 and guidance_lost:
 		_detonate(false)
 
@@ -98,14 +98,14 @@ func apply_point_defense_damage(amount: float) -> void:
 		_detonate(true)
 
 
-func _detonate(intercepted: bool) -> void:
+func _detonate(intercepted: bool, register_impact: bool = false) -> void:
 	if exploding:
 		return
 	exploding = true
 	active_fragment_radius = profile.intercepted_fragment_radius if intercepted else profile.fragment_radius
 	var damage: float = profile.intercepted_maximum_damage if intercepted else profile.maximum_damage
 	detonated.emit(global_position, active_fragment_radius, damage, intercepted, team_id)
-	if not intercepted and is_instance_valid(target):
+	if register_impact and is_instance_valid(target):
 		impacted.emit(target)
 	queue_redraw()
 

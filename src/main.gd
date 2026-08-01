@@ -99,6 +99,8 @@ func _toggle_secondary_info() -> void:
 
 
 func _cut_selected_engines() -> void:
+	if match_over:
+		return
 	for unit: TacticalUnitScene in selected_units:
 		unit.cut_engines()
 	_update_status()
@@ -112,7 +114,7 @@ func _toggle_attack_command() -> void:
 
 
 func _arm_attack_command() -> void:
-	if selected_units.is_empty():
+	if match_over or selected_units.is_empty():
 		return
 	attack_command_armed = true
 	attack_mode_button.text = "ANNULER [ÉCHAP]"
@@ -126,6 +128,8 @@ func _cancel_attack_command() -> void:
 
 
 func _toggle_selected_sensors() -> void:
+	if match_over:
+		return
 	for unit: TacticalUnitScene in selected_units:
 		unit.toggle_sensor_mode()
 	_update_sensor_picture()
@@ -133,11 +137,16 @@ func _toggle_selected_sensors() -> void:
 
 
 func _process(delta: float) -> void:
-	var processed_ticks: int = simulation_clock.advance(delta)
 	if attack_zone_display_remaining > 0.0:
 		attack_zone_display_remaining = maxf(0.0, attack_zone_display_remaining - delta)
 		queue_redraw()
 	_update_camera(delta)
+
+
+func _physics_process(delta: float) -> void:
+	var processed_ticks: int = simulation_clock.advance(delta)
+	if processed_ticks <= 0 or match_over:
+		return
 	_update_objective(delta)
 	if match_over:
 		return
@@ -145,9 +154,8 @@ func _process(delta: float) -> void:
 	_update_theater_bounds()
 	_update_missile_guidance()
 	_update_point_defense(delta)
-	if processed_ticks > 0:
-		_update_sensor_picture()
-		_update_status()
+	_update_sensor_picture()
+	_update_status()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -375,6 +383,11 @@ func _update_theater_bounds() -> void:
 func _end_match(winning_team: int) -> void:
 	match_over = true
 	simulation_clock.paused = true
+	units_layer.process_mode = Node.PROCESS_MODE_DISABLED
+	missiles_layer.process_mode = Node.PROCESS_MODE_DISABLED
+	pdc_projectiles_layer.process_mode = Node.PROCESS_MODE_DISABLED
+	stations_layer.process_mode = Node.PROCESS_MODE_DISABLED
+	_cancel_attack_command()
 	victory_label.text = "VICTOIRE BLEUE" if winning_team == 0 else "VICTOIRE ROUGE"
 	victory_label.visible = true
 
