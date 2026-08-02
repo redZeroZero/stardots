@@ -34,8 +34,8 @@ func _test_swarm_distribution(failures: Array[String]) -> void:
 	for index: int in 3:
 		var target: TacticalUnit = battlefield.enemy_units[index]
 		target.global_position = zone_center + Vector2(0.0, float(index - 1) * 60.0)
-		target.set_intel_state(TacticalUnit.IntelState.IDENTIFIED)
 	battlefield.enemy_units[3].global_position = Vector2(1000.0, -1000.0)
+	battlefield._update_sensor_picture()
 	var shots: int = battlefield._issue_attack_zone(zone_center)
 	if shots != 8:
 		failures.append("la saturation de l'arsenal ne lance pas ses huit cellules")

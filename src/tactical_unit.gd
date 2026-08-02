@@ -106,6 +106,7 @@ var is_orienting_to_final_heading: bool = false
 var final_heading: float = 0.0
 var selected: bool = false
 var intel_state: IntelState = IntelState.IDENTIFIED
+var contact_uncertainty_radius: float = 0.0
 var contact_offset: Vector2 = Vector2.ZERO
 var impact_flash_remaining: float = 0.0
 var defense_fire_remaining: float = 0.0
@@ -402,6 +403,20 @@ func set_intel_state(value: IntelState, uncertainty_offset: Vector2 = Vector2.ZE
 		return
 	intel_state = value
 	contact_offset = uncertainty_offset
+	queue_redraw()
+
+
+func set_sensor_contact(value: IntelState, estimated_position: Vector2, uncertainty_radius: float) -> void:
+	var offset: Vector2 = estimated_position - global_position
+	if (
+		intel_state == value
+		and contact_offset.distance_to(offset) <= 0.01
+		and is_equal_approx(contact_uncertainty_radius, uncertainty_radius)
+	):
+		return
+	intel_state = value
+	contact_offset = offset
+	contact_uncertainty_radius = maxf(0.0, uncertainty_radius)
 	queue_redraw()
 
 
@@ -1001,6 +1016,7 @@ func _draw() -> void:
 		)
 	if team_id != 0 and intel_state == IntelState.SIGNAL:
 		var signal_radius: float = maxf(13.0, symbol_radius)
+		_draw_contact_uncertainty(contact_offset, signal_radius, important_stroke)
 		draw_circle(contact_offset, signal_radius, Color(1.0, 0.74, 0.28, 0.10))
 		var signal_segments: int = TacticalPresentation.circle_segments(signal_radius, visual_zoom)
 		draw_arc(contact_offset, signal_radius, -PI * 0.35, PI * 1.35, signal_segments, halo_color, halo_stroke)
@@ -1009,9 +1025,11 @@ func _draw() -> void:
 		draw_line(contact_offset + Vector2(-reticle_half, 0.0), contact_offset + Vector2(reticle_half, 0.0), Color("ffbd48"), important_stroke)
 		return
 	if team_id != 0 and intel_state == IntelState.TRACKED:
+		var tracked_center: Vector2 = contact_offset
+		_draw_contact_uncertainty(tracked_center, symbol_radius, important_stroke)
 		var tracked_shape := PackedVector2Array([
-			Vector2(0.0, -symbol_radius), Vector2(symbol_radius, 0.0),
-			Vector2(0.0, symbol_radius), Vector2(-symbol_radius, 0.0),
+			tracked_center + Vector2(0.0, -symbol_radius), tracked_center + Vector2(symbol_radius, 0.0),
+			tracked_center + Vector2(0.0, symbol_radius), tracked_center + Vector2(-symbol_radius, 0.0),
 		])
 		draw_polyline(tracked_shape + PackedVector2Array([tracked_shape[0]]), halo_color, halo_stroke)
 		draw_polyline(tracked_shape + PackedVector2Array([tracked_shape[0]]), Color("ff9f43"), important_stroke)
@@ -1139,6 +1157,25 @@ func _weapon_arc_color(system: WeaponSystemProfile, alpha_boost: float) -> Color
 			if system.tactical_role == WeaponSystemProfile.TacticalRole.INTERCEPTOR:
 				return Color(0.55, 1.0, 0.62, 0.30 * alpha_boost)
 	return Color(1.0, 0.72, 0.30, 0.28 * alpha_boost)
+
+
+func _draw_contact_uncertainty(center: Vector2, symbol_radius: float, stroke: float) -> void:
+	if contact_uncertainty_radius <= symbol_radius * 1.5:
+		return
+	var radius: float = minf(contact_uncertainty_radius, 240.0)
+	var bracket_half_angle: float = 0.18
+	var segments: int = TacticalPresentation.circle_segments(radius, visual_zoom)
+	var uncertainty_color := Color(1.0, 0.68, 0.30, 0.30)
+	for cardinal_angle: float in [0.0, PI * 0.5, PI, PI * 1.5]:
+		draw_arc(
+			center,
+			radius,
+			cardinal_angle - bracket_half_angle,
+			cardinal_angle + bracket_half_angle,
+			segments,
+			uncertainty_color,
+			stroke
+		)
 
 
 func _draw_launcher_status(alpha: float = 1.0) -> void:

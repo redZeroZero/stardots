@@ -6,6 +6,7 @@ const PdcProjectileScene := preload("res://src/pdc_projectile.gd")
 const RailgunProjectileScene := preload("res://src/railgun_projectile.gd")
 const StrategicStationScene := preload("res://src/strategic_station.gd")
 const TacticalPilotLogic := preload("res://src/ai/tactical_pilot.gd")
+const SensorTrackLogic := preload("res://src/simulation/sensor_track.gd")
 const UNIT_PROFILE: UnitProfile = preload("res://data/balance/default_unit.tres")
 const AWACS_PROFILE: UnitProfile = preload("res://data/balance/awacs_unit.tres")
 const MISSILE_PROFILE: MissileProfile = preload("res://data/balance/default_missile.tres")
@@ -25,6 +26,7 @@ const EDGE_SCROLL_MARGIN: float = 18.0
 const ATTACK_ZONE_RADIUS: float = 180.0
 const ATTACK_ZONE_DISPLAY_DURATION: float = 1.6
 const SENSOR_UPDATE_INTERVAL: float = 0.20
+const FIRE_CONTROL_MAXIMUM_UNCERTAINTY: float = 45.0
 const MISSILE_SWARM_SPACING: float = 52.0
 const PDC_SPATIAL_CELL_SIZE: float = 160.0
 const THEATER_RETURN_MARGIN: float = 180.0
@@ -79,12 +81,14 @@ var ai_decision_remaining: float = 1.8
 var enemy_tactical_pilot = TacticalPilotLogic.new(DEFAULT_TACTICAL_PILOT_PROFILE)
 var enemy_tactical_pilot_enabled: bool = true
 var sensor_update_remaining: float = SENSOR_UPDATE_INTERVAL
+var sensor_tracks_by_team: Array[Dictionary] = [{}, {}]
 var objective_station: StrategicStationScene
 var team_hold_time: Array[float] = [0.0, 0.0]
 var match_over: bool = false
 var propulsion_demo: bool = OS.get_cmdline_user_args().has("--propulsion-demo")
 var weapons_demo: bool = OS.get_cmdline_user_args().has("--weapons-demo")
 var ai_demo: bool = OS.get_cmdline_user_args().has("--ai-demo")
+var sensor_demo: bool = OS.get_cmdline_user_args().has("--sensor-demo")
 var benchmark_empty_scenario: bool = false
 var target_camera_zoom: float = 0.42
 var zoom_anchor_world: Vector2 = Vector2.ZERO
@@ -129,11 +133,16 @@ func _ready() -> void:
 	tactical_overlay.bind(self)
 	tactical_labels.bind(self)
 	_spawn_demo_units()
-	if propulsion_demo or weapons_demo:
+	if propulsion_demo or weapons_demo or sensor_demo:
 		for unit: TacticalUnitScene in friendly_units:
 			selected_units.append(unit)
 			unit.set_selected(true)
-		_frame_friendly_units()
+		if sensor_demo:
+			tactical_camera.position = Vector2(250.0, 360.0)
+			tactical_camera.zoom = Vector2.ONE * 0.50
+			target_camera_zoom = 0.50
+		else:
+			_frame_friendly_units()
 	_apply_visual_zoom()
 	if ai_demo:
 		_frame_units(friendly_units + enemy_units)
@@ -141,6 +150,8 @@ func _ready() -> void:
 		objective_label.text = "SCÉNARIO: ARMEMENTS ET ARCS — A PUIS CLIC SUR UNE CIBLE"
 	elif ai_demo:
 		objective_label.text = "SCÉNARIO: PILOTE TACTIQUE IA — PORTÉE, CAP ET ARCS"
+	elif sensor_demo:
+		objective_label.text = "SCÉNARIO: VIEILLISSEMENT DE PISTE — OBSERVER LE CONTACT SORTANT"
 	elif propulsion_demo:
 		objective_label.text = "SCÉNARIO: COMPARATIF PROPULSION — F POUR CADRER"
 	elif DUEL_SANDBOX:
@@ -239,11 +250,12 @@ func _physics_process(delta: float) -> void:
 	_update_objective(delta)
 	if match_over:
 		return
+	_advance_sensor_tracks(delta)
+	_update_sensor_picture_if_due(delta)
 	_update_ai(delta)
 	_update_theater_bounds()
 	_update_missile_guidance()
 	_update_point_defense(delta)
-	_update_sensor_picture_if_due(delta)
 	_update_status()
 
 
@@ -453,6 +465,8 @@ func _spawn_demo_units() -> void:
 		_spawn_weapons_demo_units()
 	elif ai_demo:
 		_spawn_ai_demo_units()
+	elif sensor_demo:
+		_spawn_sensor_demo_units()
 	elif propulsion_demo:
 		_spawn_propulsion_demo_units()
 	elif DUEL_SANDBOX:
@@ -637,6 +651,33 @@ func _spawn_ai_demo_units() -> void:
 	awacs.sensor_mode = TacticalUnitScene.SensorMode.ACTIVE
 
 
+func _spawn_sensor_demo_units() -> void:
+	var sensor_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
+	sensor_profile.display_name = "Plateforme de veille"
+	sensor_profile.tactical_role = "CAPTEUR ACTIF"
+	sensor_profile.weapon_system_profiles = []
+	sensor_profile.missile_capacity = 0
+	sensor_profile.missile_launcher_count = 0
+	sensor_profile.point_defense_ammunition_capacity = 0
+	var sensor: TacticalUnitScene = _spawn_unit("SENSOR-01", 0, Vector2(-500.0, 360.0), sensor_profile)
+	sensor.sensor_mode = TacticalUnitScene.SensorMode.ACTIVE
+
+	var target_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
+	target_profile.display_name = "Contact de calibration"
+	target_profile.tactical_role = "CIBLE MOBILE"
+	target_profile.weapon_system_profiles = []
+	target_profile.missile_capacity = 0
+	target_profile.missile_launcher_count = 0
+	target_profile.point_defense_ammunition_capacity = 0
+	var fast_drive: PropulsionProfile = VECTOR_DRIVE_PROFILE.duplicate(true)
+	fast_drive.tactical_speed_limit = 180.0
+	fast_drive.drive_acceleration = 90.0
+	target_profile.propulsion_profile = fast_drive
+	var target: TacticalUnitScene = _spawn_unit("CONTACT-01", 1, Vector2(-320.0, 360.0), target_profile)
+	target.invulnerable = true
+	target.set_navigation_order(Vector2(1500.0, 360.0), true)
+
+
 func _spawn_unit(callsign: String, team_id: int, start_position: Vector2, profile: UnitProfile) -> TacticalUnitScene:
 	var unit := TacticalUnitScene.new() as TacticalUnitScene
 	unit.configure(callsign, team_id, start_position, profile)
@@ -728,44 +769,158 @@ func _end_match(winning_team: int) -> void:
 
 
 func _update_sensor_picture() -> void:
-	var signal_count: int = 0
-	var tracked_count: int = 0
-	var identified_count: int = 0
+	_begin_sensor_pass()
+	var best_friendly_observations := PackedFloat64Array()
+	best_friendly_observations.resize(friendly_units.size())
+	best_friendly_observations.fill(INF)
+	var best_enemy_observations := PackedFloat64Array()
+	best_enemy_observations.resize(enemy_units.size())
+	best_enemy_observations.fill(INF)
+	var friendly_signatures := PackedFloat64Array()
+	friendly_signatures.resize(friendly_units.size())
+	var enemy_signatures := PackedFloat64Array()
+	enemy_signatures.resize(enemy_units.size())
+	for friendly_index: int in friendly_units.size():
+		friendly_signatures[friendly_index] = friendly_units[friendly_index].get_thermal_signature()
+	for enemy_index: int in enemy_units.size():
+		enemy_signatures[enemy_index] = enemy_units[enemy_index].get_thermal_signature()
 
-	for enemy: TacticalUnitScene in enemy_units:
-		if enemy.destroyed:
+	for friendly_index: int in friendly_units.size():
+		var friendly: TacticalUnitScene = friendly_units[friendly_index]
+		if friendly.destroyed:
 			continue
-		var enemy_thermal_signature: float = enemy.get_thermal_signature()
-		var best_range_ratio_squared: float = INF
-		for friendly: TacticalUnitScene in friendly_units:
-			if friendly.destroyed:
+		for enemy_index: int in enemy_units.size():
+			var enemy: TacticalUnitScene = enemy_units[enemy_index]
+			if enemy.destroyed:
 				continue
-			best_range_ratio_squared = minf(
-				best_range_ratio_squared,
-				_sensor_range_ratio_squared(friendly, enemy, enemy_thermal_signature)
+			var distance_squared: float = friendly.global_position.distance_squared_to(enemy.global_position)
+			best_enemy_observations[enemy_index] = minf(
+				best_enemy_observations[enemy_index],
+				_sensor_range_ratio_squared_at_distance(
+					friendly,
+					enemy,
+					enemy_signatures[enemy_index],
+					distance_squared
+				)
 			)
-		if objective_station != null and objective_station.team_id == 0:
-			var station_range: float = objective_station.sensor_range * enemy_thermal_signature
+			best_friendly_observations[friendly_index] = minf(
+				best_friendly_observations[friendly_index],
+				_sensor_range_ratio_squared_at_distance(
+					enemy,
+					friendly,
+					friendly_signatures[friendly_index],
+					distance_squared
+				)
+			)
+
+	if objective_station != null and objective_station.team_id == 0:
+		for enemy_index: int in enemy_units.size():
+			var enemy: TacticalUnitScene = enemy_units[enemy_index]
+			if enemy.destroyed:
+				continue
+			var station_range: float = objective_station.sensor_range * enemy_signatures[enemy_index]
 			var station_ratio_squared: float = objective_station.global_position.distance_squared_to(enemy.global_position) / maxf(
 				station_range * station_range,
 				0.0001
 			)
-			best_range_ratio_squared = minf(best_range_ratio_squared, station_ratio_squared)
+			best_enemy_observations[enemy_index] = minf(
+				best_enemy_observations[enemy_index],
+				station_ratio_squared
+			)
 
-		var new_state: TacticalUnitScene.IntelState = TacticalUnitScene.IntelState.HIDDEN
-		var uncertainty := Vector2.ZERO
-		if best_range_ratio_squared <= 0.36 * 0.36:
-			new_state = TacticalUnitScene.IntelState.IDENTIFIED
+	for enemy_index: int in enemy_units.size():
+		_record_sensor_observation(0, enemy_units[enemy_index], best_enemy_observations[enemy_index])
+	for friendly_index: int in friendly_units.size():
+		_record_sensor_observation(1, friendly_units[friendly_index], best_friendly_observations[friendly_index])
+	_sync_player_sensor_picture()
+
+
+func _begin_sensor_pass() -> void:
+	for team_tracks: Dictionary in sensor_tracks_by_team:
+		for track in team_tracks.values():
+			track.begin_sensor_pass()
+
+
+func _record_sensor_observation(
+	observer_team_id: int,
+	target: TacticalUnitScene,
+	best_range_ratio_squared: float
+) -> void:
+	if target.destroyed:
+		return
+	var observed_state: int = SensorTrackLogic.State.HIDDEN
+	var base_uncertainty: float = SensorTrackLogic.MAXIMUM_UNCERTAINTY
+	var observed_position: Vector2 = target.global_position
+	var observed_velocity: Vector2 = target.velocity
+	if best_range_ratio_squared <= 0.36 * 0.36:
+		observed_state = SensorTrackLogic.State.IDENTIFIED
+		base_uncertainty = 2.0
+	elif best_range_ratio_squared <= 0.68 * 0.68:
+		observed_state = SensorTrackLogic.State.TRACKED
+		base_uncertainty = 14.0
+	elif best_range_ratio_squared <= 1.0:
+		observed_state = SensorTrackLogic.State.SIGNAL
+		base_uncertainty = 90.0
+		var phase: float = deg_to_rad(float(abs(target.callsign.hash()) % 360))
+		observed_position += Vector2.from_angle(phase) * base_uncertainty * 0.45
+		observed_velocity = Vector2.ZERO
+	if observed_state == SensorTrackLogic.State.HIDDEN:
+		return
+	var track = _get_or_create_sensor_track(observer_team_id, target)
+	track.observe(observed_state, observed_position, observed_velocity, base_uncertainty)
+
+
+func _advance_sensor_tracks(delta: float) -> void:
+	for team_tracks: Dictionary in sensor_tracks_by_team:
+		var expired_keys: Array[int] = []
+		for target_id: int in team_tracks:
+			var track = team_tracks[target_id]
+			if not is_instance_valid(track.target) or track.target.destroyed:
+				expired_keys.append(target_id)
+				continue
+			track.advance(delta)
+			if track.get_state() == SensorTrackLogic.State.HIDDEN and track.seconds_since_any_observation > 2.0:
+				expired_keys.append(target_id)
+		for target_id: int in expired_keys:
+			team_tracks.erase(target_id)
+	_sync_player_sensor_picture()
+
+
+func _get_or_create_sensor_track(observer_team_id: int, target: TacticalUnitScene):
+	var team_tracks: Dictionary = sensor_tracks_by_team[observer_team_id]
+	var target_id: int = target.get_instance_id()
+	if not team_tracks.has(target_id):
+		team_tracks[target_id] = SensorTrackLogic.new(
+			observer_team_id,
+			target,
+			target.maximum_acceleration
+		)
+	return team_tracks[target_id]
+
+
+func _get_sensor_track(observer_team_id: int, target: TacticalUnitScene):
+	return sensor_tracks_by_team[observer_team_id].get(target.get_instance_id())
+
+
+func _sync_player_sensor_picture() -> void:
+	var signal_count: int = 0
+	var tracked_count: int = 0
+	var identified_count: int = 0
+	for enemy: TacticalUnitScene in enemy_units:
+		if enemy.destroyed:
+			continue
+		var track = _get_sensor_track(0, enemy)
+		var new_state: int = SensorTrackLogic.State.HIDDEN if track == null else track.get_state()
+		if new_state == SensorTrackLogic.State.IDENTIFIED:
 			identified_count += 1
-		elif best_range_ratio_squared <= 0.68 * 0.68:
-			new_state = TacticalUnitScene.IntelState.TRACKED
+		elif new_state == SensorTrackLogic.State.TRACKED:
 			tracked_count += 1
-		elif best_range_ratio_squared <= 1.0:
-			new_state = TacticalUnitScene.IntelState.SIGNAL
-			var phase: float = deg_to_rad(float(abs(enemy.callsign.hash()) % 360))
-			uncertainty = Vector2.from_angle(phase) * 34.0
+		elif new_state == SensorTrackLogic.State.SIGNAL:
 			signal_count += 1
-		enemy.set_intel_state(new_state, uncertainty)
+		if track == null:
+			enemy.set_sensor_contact(TacticalUnitScene.IntelState.HIDDEN, enemy.global_position, 0.0)
+		else:
+			enemy.set_sensor_contact(new_state, track.estimated_position, track.uncertainty_radius)
 
 	intel_label.text = "RENSEIGNEMENT: %d SIGNAL  •  %d PISTE  •  %d IDENTIFIÉ" % [
 		signal_count,
@@ -854,10 +1009,10 @@ func _issue_attack_zone(zone_center: Vector2) -> int:
 	attack_zone_display_remaining = ATTACK_ZONE_DISPLAY_DURATION
 	var candidates: Array[TacticalUnitScene] = []
 	for enemy: TacticalUnitScene in enemy_units:
-		if enemy.is_targetable_contact() and enemy.global_position.distance_to(zone_center) <= ATTACK_ZONE_RADIUS:
+		if enemy.is_targetable_contact() and _get_contact_position(0, enemy).distance_to(zone_center) <= ATTACK_ZONE_RADIUS:
 			candidates.append(enemy)
 	candidates.sort_custom(func(first: TacticalUnitScene, second: TacticalUnitScene):
-		return first.global_position.distance_squared_to(zone_center) < second.global_position.distance_squared_to(zone_center)
+		return _get_contact_position(0, first).distance_squared_to(zone_center) < _get_contact_position(0, second).distance_squared_to(zone_center)
 	)
 	var shots_fired: int = 0
 	var missile_allocation: Dictionary = {"cursor": 0}
@@ -945,14 +1100,15 @@ func _fire_railgun(launcher: TacticalUnitScene, target: TacticalUnitScene) -> bo
 		WeaponSystemProfile.Family.RAILGUN,
 		WeaponSystemProfile.TacticalRole.KINETIC_STRIKE
 	)
-	if not launcher.can_fire_weapon_system(system, target.global_position):
+	var target_position: Vector2 = _get_contact_position(launcher.team_id, target)
+	if not launcher.can_fire_weapon_system(system, target_position):
 		return false
 	if not _launcher_has_fire_control_solution(launcher, target):
 		return false
 	var aim_point: Vector2 = _calculate_intercept_point(
 		launcher.global_position,
-		target.global_position,
-		target.velocity,
+		target_position,
+		_get_contact_velocity(launcher.team_id, target),
 		system.projectile_speed
 	)
 	var projectile := RailgunProjectileScene.new() as RailgunProjectile
@@ -993,7 +1149,8 @@ func _launch_missile_salvo(
 	var start_index: int = int(allocation.get("cursor", 0))
 	for offset: int in targets.size():
 		var target: TacticalUnitScene = targets[(start_index + offset) % targets.size()]
-		if target.destroyed or not launcher.can_launch_weapon_at(target.global_position):
+		var target_position: Vector2 = _get_contact_position(launcher.team_id, target)
+		if target.destroyed or not launcher.can_launch_weapon_at(target_position):
 			continue
 		if not _launcher_has_fire_control_solution(launcher, target) or not _is_target_in_missile_range(launcher, target):
 			continue
@@ -1004,11 +1161,13 @@ func _launch_missile_salvo(
 	if requested_count <= 0:
 		return 0
 	var missile_profile: MissileProfile = launcher.get_anti_ship_missile_profile()
-	var launched_count: int = launcher.consume_anti_ship_missiles(eligible_targets[0].global_position, requested_count)
+	var first_target_position: Vector2 = _get_contact_position(launcher.team_id, eligible_targets[0])
+	var launched_count: int = launcher.consume_anti_ship_missiles(first_target_position, requested_count)
 	for launch_index: int in launched_count:
 		var assigned_target: TacticalUnitScene = eligible_targets[launch_index % eligible_targets.size()]
+		var assigned_position: Vector2 = _get_contact_position(launcher.team_id, assigned_target)
 		var lane_slot: float = float(launch_index) - float(launched_count - 1) * 0.5
-		var lane_direction: Vector2 = launcher.global_position.direction_to(assigned_target.global_position).rotated(PI * 0.5)
+		var lane_direction: Vector2 = launcher.global_position.direction_to(assigned_position).rotated(PI * 0.5)
 		var lane_offset: Vector2 = lane_direction * lane_slot * MISSILE_SWARM_SPACING
 		var missile := TacticalMissileScene.new() as TacticalMissileScene
 		missiles_layer.add_child(missile)
@@ -1020,7 +1179,8 @@ func _launch_missile_salvo(
 			launcher.global_position + launch_offset,
 			assigned_target,
 			launcher.team_id,
-			missile_profile if missile_profile != null else MISSILE_PROFILE
+			missile_profile if missile_profile != null else MISSILE_PROFILE,
+			assigned_position
 		)
 		missile.set_cruise_lane_offset(lane_offset)
 		missile.set_visual_zoom(tactical_camera.zoom.x)
@@ -1031,7 +1191,7 @@ func _launch_missile_salvo(
 
 
 func _update_ai(delta: float) -> void:
-	if weapons_demo:
+	if weapons_demo or sensor_demo:
 		return
 	ai_decision_remaining -= delta
 	if ai_decision_remaining > 0.0:
@@ -1089,12 +1249,16 @@ func _find_closest_tracked_target(launcher: TacticalUnitScene, candidates: Array
 	for candidate: TacticalUnitScene in candidates:
 		if candidate.destroyed or launcher.destroyed or launcher.team_id == candidate.team_id:
 			continue
-		if (
+		var track = _get_sensor_track(launcher.team_id, candidate)
+		if track != null and track.get_state() < SensorTrackLogic.State.TRACKED:
+			continue
+		if track == null and (
 			_sensor_range_ratio_squared(launcher, candidate) > 0.68 * 0.68
 			and not _providers_have_fire_control_solution(launcher, candidate, fire_control_providers)
 		):
 			continue
-		var distance: float = launcher.global_position.distance_to(candidate.global_position)
+		var contact_position: Vector2 = candidate.global_position if track == null else track.estimated_position
+		var distance: float = launcher.global_position.distance_to(contact_position)
 		if distance < closest_distance:
 			closest_target = candidate
 			closest_distance = distance
@@ -1104,13 +1268,26 @@ func _find_closest_tracked_target(launcher: TacticalUnitScene, candidates: Array
 func _launcher_has_fire_control_solution(launcher: TacticalUnitScene, target: TacticalUnitScene) -> bool:
 	if launcher.destroyed or target.destroyed or launcher.team_id == target.team_id:
 		return false
+	var track = _get_sensor_track(launcher.team_id, target)
 	if _sensor_range_ratio_squared(launcher, target) <= 0.68 * 0.68:
 		return true
-	return _providers_have_fire_control_solution(
+	if _providers_have_fire_control_solution(
 		launcher,
 		target,
 		_get_fire_control_providers(launcher.team_id)
-	)
+	):
+		return true
+	return track != null and track.has_fire_control_quality(FIRE_CONTROL_MAXIMUM_UNCERTAINTY)
+
+
+func _get_contact_position(observer_team_id: int, target: TacticalUnitScene) -> Vector2:
+	var track = _get_sensor_track(observer_team_id, target)
+	return target.global_position if track == null else track.estimated_position
+
+
+func _get_contact_velocity(observer_team_id: int, target: TacticalUnitScene) -> Vector2:
+	var track = _get_sensor_track(observer_team_id, target)
+	return target.velocity if track == null else track.estimated_velocity
 
 
 func _get_fire_control_providers(team_id: int) -> Array[TacticalUnitScene]:
@@ -1140,7 +1317,7 @@ func _providers_have_fire_control_solution(
 func _is_target_in_missile_range(launcher: TacticalUnitScene, target: TacticalUnitScene) -> bool:
 	return (
 		launcher.get_anti_ship_missile_range() > 0.0
-		and launcher.global_position.distance_to(target.global_position) <= launcher.get_anti_ship_missile_range()
+		and launcher.global_position.distance_to(_get_contact_position(launcher.team_id, target)) <= launcher.get_anti_ship_missile_range()
 	)
 
 
@@ -1160,7 +1337,14 @@ func _update_missile_guidance() -> void:
 			continue
 		if missile.target is TacticalUnit:
 			missile.target.trigger_combat_thermal_mode()
-			missile.set_external_guidance(_team_has_track(missile.team_id, missile.target))
+			var guidance_track = _get_sensor_track(missile.team_id, missile.target)
+			var guidance_available: bool = _team_has_track(missile.team_id, missile.target)
+			var guidance_position: Vector2 = (
+				missile.target.global_position
+				if guidance_track == null
+				else guidance_track.estimated_position
+			)
+			missile.set_external_guidance(guidance_available, guidance_position)
 		elif missile.target is TacticalMissile:
 			# Un intercepteur possède sa propre piste locale sur le missile poursuivi.
 			missile.set_external_guidance(true)
@@ -1169,6 +1353,9 @@ func _update_missile_guidance() -> void:
 func _team_has_track(observer_team_id: int, target: TacticalUnitScene) -> bool:
 	if target.destroyed:
 		return false
+	var fused_track = _get_sensor_track(observer_team_id, target)
+	if fused_track != null:
+		return fused_track.get_state() >= SensorTrackLogic.State.TRACKED
 	if observer_team_id == 0 and target.team_id != 0:
 		return target.intel_state >= TacticalUnitScene.IntelState.TRACKED
 
@@ -1199,7 +1386,21 @@ func _sensor_range_ratio_squared(
 		if target_thermal_signature >= 0.0
 		else target.get_thermal_signature()
 	)
-	var passive_range: float = sensor.sensor_range * thermal_signature
+	return _sensor_range_ratio_squared_at_distance(
+		sensor,
+		target,
+		thermal_signature,
+		distance_squared
+	)
+
+
+func _sensor_range_ratio_squared_at_distance(
+	sensor: TacticalUnitScene,
+	target: TacticalUnitScene,
+	target_thermal_signature: float,
+	distance_squared: float
+) -> float:
+	var passive_range: float = sensor.sensor_range * target_thermal_signature
 	var best_ratio_squared: float = distance_squared / maxf(passive_range * passive_range, 0.0001)
 	if sensor.sensor_mode == TacticalUnitScene.SensorMode.ACTIVE:
 		best_ratio_squared = minf(

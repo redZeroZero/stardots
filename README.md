@@ -71,6 +71,17 @@ camp IA : les unités bleues continuent de dépendre exclusivement des ordres du
 joueur. `FRIG-BLEU` dispose de missiles moyens, `RAIL-BLEU` d'un canon axial et
 `EYE-BLEU` leur fournit les pistes nécessaires.
 
+Pour observer la dégradation d'une piste après sa sortie de détection :
+
+```bash
+./scripts/godot --path . -- --sensor-demo
+```
+
+`CONTACT-01` quitte automatiquement la portée de `SENSOR-01`. Sa dernière
+position est propagée selon son vecteur connu, les quatre crochets orange
+montrent l'incertitude croissante, puis la piste devient signal avant de
+disparaître.
+
 Pour exécuter les tests de charge principaux :
 
 ```bash

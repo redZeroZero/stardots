@@ -237,6 +237,27 @@ capteurs, IA et PDC inclus. Les missiles sont indexés spatialement pour la
 défense proche et la signature thermique d'une cible n'est calculée qu'une fois
 par passe capteur.
 
+## Pistes capteurs fusionnées
+
+Chaque camp conserve désormais une seule `SensorTrack` par contact. Une
+observation proche fournit position et vecteur précis ; après perte du capteur,
+le calculateur propage ce dernier vecteur, réduit progressivement la confiance
+et augmente l'incertitude selon l'accélération possible de la cible. Le contact
+rétrograde d'identification à piste, puis signal, avant de disparaître. Une
+incertitude supérieure à `45` unités ne constitue plus une solution de tir.
+
+Les symboles de piste et de signal sont placés sur la position estimée plutôt
+que sur la position réelle. Quatre crochets orange indiquent sobrement
+l'incertitude croissante. Railguns et missiles reçoivent également cette
+position estimée ; un missile conserve la dernière information partagée jusqu'à
+son éventuelle acquisition terminale. Le scénario `--sensor-demo` permet
+d'observer toute la dégradation sur un contact sortant.
+
+La passe à `5 Hz` traite les deux camps simultanément : la distance d'une paire
+bleu/rouge n'est calculée qu'une fois, puis sert aux deux directions de
+détection. Le vieillissement entre deux passes reste linéaire dans le nombre de
+pistes existantes.
+
 ## Systèmes d'armes et emplacements
 
 Un angle de `0°` regarde la proue, `-90°` bâbord, `90°` tribord et `180°` la

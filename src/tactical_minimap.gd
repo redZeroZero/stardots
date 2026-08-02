@@ -74,7 +74,7 @@ func _draw() -> void:
 		if not is_instance_valid(unit) or unit.destroyed or unit.intel_state == TacticalUnit.IntelState.HIDDEN:
 			continue
 		var contact_position: Vector2 = unit.global_position
-		if unit.intel_state == TacticalUnit.IntelState.SIGNAL:
+		if unit.intel_state < TacticalUnit.IntelState.IDENTIFIED:
 			contact_position += unit.contact_offset
 		_draw_contact_symbol(_world_to_map(contact_position), unit.intel_state, unit.rotation)
 

@@ -17,7 +17,7 @@ func _run() -> void:
 	frigate_two.global_position = Vector2(700.0, 390.0)
 	awacs.global_position = Vector2.ZERO
 	bandit.global_position = Vector2(1500.0, 360.0)
-	bandit.set_intel_state(TacticalUnit.IntelState.TRACKED)
+	battlefield._update_sensor_picture()
 	for unit: TacticalUnit in [awacs, frigate_one, frigate_two]:
 		battlefield.selected_units.append(unit)
 		unit.set_selected(true)

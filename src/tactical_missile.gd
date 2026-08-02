@@ -23,7 +23,13 @@ var cruise_lane_offset: Vector2 = Vector2.ZERO
 var distance_travelled: float = 0.0
 
 
-func launch(origin: Vector2, new_target: Node2D, launcher_team_id: int, missile_profile: MissileProfile) -> void:
+func launch(
+	origin: Vector2,
+	new_target: Node2D,
+	launcher_team_id: int,
+	missile_profile: MissileProfile,
+	initial_guidance_position: Vector2 = Vector2(INF, INF)
+) -> void:
 	global_position = origin
 	target = new_target
 	team_id = launcher_team_id
@@ -31,7 +37,11 @@ func launch(origin: Vector2, new_target: Node2D, launcher_team_id: int, missile_
 	add_to_group("active_missiles")
 	integrity = profile.maximum_integrity
 	active_fragment_radius = profile.fragment_radius
-	last_known_position = target.global_position
+	last_known_position = (
+		initial_guidance_position
+		if initial_guidance_position.is_finite()
+		else target.global_position
+	)
 	distance_travelled = 0.0
 	var launch_direction: Vector2 = global_position.direction_to(last_known_position)
 	velocity = launch_direction * profile.launch_speed
@@ -59,7 +69,6 @@ func _physics_process(delta: float) -> void:
 
 	var target_is_valid := is_instance_valid(target)
 	if target_is_valid and external_guidance_available:
-		last_known_position = target.global_position
 		guidance_lost = false
 	else:
 		guidance_lost = true
@@ -105,8 +114,13 @@ func is_warhead_armed() -> bool:
 	return distance_travelled >= profile.warhead_arming_distance
 
 
-func set_external_guidance(available: bool) -> void:
+func set_external_guidance(
+	available: bool,
+	guidance_position: Vector2 = Vector2(INF, INF)
+) -> void:
 	external_guidance_available = available
+	if available and guidance_position.is_finite():
+		last_known_position = guidance_position
 
 
 func set_visual_zoom(value: float) -> void:
