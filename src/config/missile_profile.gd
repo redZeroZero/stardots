@@ -1,6 +1,9 @@
 class_name MissileProfile
 extends Resource
 
+@export_category("Identité")
+@export var display_name: String = "Missile antinavire moyen"
+
 @export_category("Cinématique et guidage")
 @export var launch_speed: float = 45.0
 @export var cruise_speed: float = 120.0
@@ -13,6 +16,7 @@ extends Resource
 @export var maximum_lifetime: float = 10.0
 
 @export_category("Charge militaire")
+@export var warhead_arming_distance: float = 55.0
 @export var proximity_fuze_range: float = 28.0
 @export var fragment_radius: float = 72.0
 @export var maximum_damage: float = 85.0

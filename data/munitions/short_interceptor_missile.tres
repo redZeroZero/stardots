@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MissileProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/missile_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+display_name = "Missile intercepteur courte portée"
+launch_speed = 90.0
+cruise_speed = 210.0
+cruise_acceleration = 150.0
+cruise_turn_rate_degrees = 180.0
+terminal_seeker_range = 140.0
+terminal_speed = 320.0
+terminal_acceleration = 240.0
+terminal_turn_rate_degrees = 260.0
+maximum_lifetime = 4.0
+proximity_fuze_range = 20.0
+fragment_radius = 38.0
+maximum_damage = 55.0
+maximum_integrity = 20.0
+intercepted_fragment_radius = 18.0
+intercepted_maximum_damage = 8.0
+explosion_duration = 0.22

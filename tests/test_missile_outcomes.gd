@@ -65,6 +65,7 @@ func _run() -> void:
 	proximity_missile.launch(Vector2.ZERO, proximity_target, 0, base_profile)
 	proximity_missile.global_position = Vector2(75.0, 0.0)
 	proximity_missile.velocity = Vector2(45.0, 0.0)
+	proximity_missile.distance_travelled = base_profile.warhead_arming_distance
 	proximity_missile._physics_process(0.01)
 	if proximity_impacts != [proximity_target]:
 		failures.append("une détonation de proximité valide n'est plus comptée comme un impact")

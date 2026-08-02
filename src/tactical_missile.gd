@@ -18,6 +18,9 @@ var terminal_guidance: bool = false
 var exploding: bool = false
 var active_fragment_radius: float = 0.0
 var external_guidance_available: bool = true
+var visual_zoom: float = 1.0
+var cruise_lane_offset: Vector2 = Vector2.ZERO
+var distance_travelled: float = 0.0
 
 
 func launch(origin: Vector2, new_target: Node2D, launcher_team_id: int, missile_profile: MissileProfile) -> void:
@@ -29,10 +32,15 @@ func launch(origin: Vector2, new_target: Node2D, launcher_team_id: int, missile_
 	integrity = profile.maximum_integrity
 	active_fragment_radius = profile.fragment_radius
 	last_known_position = target.global_position
+	distance_travelled = 0.0
 	var launch_direction: Vector2 = global_position.direction_to(last_known_position)
 	velocity = launch_direction * profile.launch_speed
 	rotation = launch_direction.angle() + PI * 0.5
 	queue_redraw()
+
+
+func set_cruise_lane_offset(offset: Vector2) -> void:
+	cruise_lane_offset = offset
 
 
 func _physics_process(delta: float) -> void:
@@ -56,11 +64,12 @@ func _physics_process(delta: float) -> void:
 	else:
 		guidance_lost = true
 
+	var distance_to_target: float = global_position.distance_to(target.global_position) if target_is_valid else global_position.distance_to(last_known_position)
 	terminal_guidance = (
 		target_is_valid
-		and global_position.distance_to(target.global_position) <= profile.terminal_seeker_range
+		and distance_to_target <= profile.terminal_seeker_range + cruise_lane_offset.length()
 	)
-	var aim_point: Vector2 = target.global_position if terminal_guidance else last_known_position
+	var aim_point: Vector2 = target.global_position if terminal_guidance else last_known_position + cruise_lane_offset
 	var desired_direction := global_position.direction_to(aim_point)
 	var current_direction := velocity.normalized() if velocity.length() > 0.01 else desired_direction
 	var turn_rate_degrees: float = profile.terminal_turn_rate_degrees if terminal_guidance else profile.cruise_turn_rate_degrees
@@ -71,10 +80,16 @@ func _physics_process(delta: float) -> void:
 	var acceleration: float = profile.terminal_acceleration if terminal_guidance else profile.cruise_acceleration
 	var new_speed: float = move_toward(velocity.length(), target_speed, acceleration * delta)
 	velocity = direction * new_speed
-	global_position += velocity * delta
+	var movement: Vector2 = velocity * delta
+	global_position += movement
+	distance_travelled += movement.length()
 	rotation = direction.angle() + PI * 0.5
 
-	if target_is_valid and global_position.distance_to(target.global_position) <= profile.proximity_fuze_range:
+	if (
+		target_is_valid
+		and distance_travelled >= profile.warhead_arming_distance
+		and global_position.distance_to(target.global_position) <= profile.proximity_fuze_range
+	):
 		_detonate(false, true)
 	elif global_position.distance_to(last_known_position) <= 3.0 and guidance_lost:
 		_detonate(false)
@@ -86,8 +101,20 @@ func is_interceptable() -> bool:
 	return not exploding and integrity > 0.0
 
 
+func is_warhead_armed() -> bool:
+	return distance_travelled >= profile.warhead_arming_distance
+
+
 func set_external_guidance(available: bool) -> void:
 	external_guidance_available = available
+
+
+func set_visual_zoom(value: float) -> void:
+	var clamped_value: float = maxf(value, 0.001)
+	if is_equal_approx(visual_zoom, clamped_value):
+		return
+	visual_zoom = clamped_value
+	queue_redraw()
 
 
 func apply_point_defense_damage(amount: float) -> void:
@@ -130,8 +157,27 @@ func _draw() -> void:
 	var missile_color := Color("ffbd48") if guidance_lost else guided_color
 	if terminal_guidance:
 		missile_color = terminal_color
-	draw_line(Vector2(0.0, 12.0), Vector2(0.0, 25.0), Color(missile_color, 0.28), 2.0)
-	draw_colored_polygon(
-		PackedVector2Array([Vector2(0.0, -7.0), Vector2(4.0, 5.0), Vector2(-4.0, 5.0)]),
-		missile_color
-	)
+	var detail_level := TacticalPresentation.detail_level(visual_zoom)
+	var minimum_length_px: float = TacticalPresentation.MINIMUM_MISSILE_LENGTH_PX
+	if team_id != 0 and detail_level != TacticalPresentation.DetailLevel.CLOSE:
+		minimum_length_px = 7.0
+	var body_length: float = maxf(12.0, TacticalPresentation.world_size_for_screen_pixels(minimum_length_px, visual_zoom))
+	var body_half_width: float = maxf(4.0, TacticalPresentation.world_size_for_screen_pixels(2.0, visual_zoom))
+	var trail_start: float = body_length
+	var trail_end: float = body_length + maxf(13.0, TacticalPresentation.world_size_for_screen_pixels(5.0, visual_zoom))
+	var stroke: float = TacticalPresentation.stroke_width(2.0, visual_zoom)
+	var halo_stroke: float = stroke + TacticalPresentation.world_size_for_screen_pixels(2.0, visual_zoom)
+	var halo_color := Color(0.015, 0.025, 0.04, 0.9)
+	var missile_shape := PackedVector2Array([
+		Vector2(0.0, -body_length * 0.58),
+		Vector2(body_half_width, body_length * 0.42),
+		Vector2(-body_half_width, body_length * 0.42),
+	])
+	draw_line(Vector2(0.0, trail_start), Vector2(0.0, trail_end), halo_color, halo_stroke)
+	draw_line(Vector2(0.0, trail_start), Vector2(0.0, trail_end), Color(missile_color, 0.42), stroke)
+	draw_colored_polygon(PackedVector2Array([
+		missile_shape[0] * 1.28,
+		missile_shape[1] * 1.28,
+		missile_shape[2] * 1.28,
+	]), halo_color)
+	draw_colored_polygon(missile_shape, missile_color)

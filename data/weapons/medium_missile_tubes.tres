@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponSystemProfile" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/config/weapon_system_profile.gd" id="1_system"]
+[ext_resource type="Resource" path="res://data/weapon_mounts/omnidirectional_vls.tres" id="2_mount"]
+[ext_resource type="Resource" path="res://data/balance/default_missile.tres" id="3_missile"]
+
+[resource]
+script = ExtResource("1_system")
+display_name = "Tubes antinavires moyens"
+family = 2
+tactical_role = 2
+mount_profile = ExtResource("2_mount")
+feed_type = 0
+launcher_count = 2
+loader_count = 1
+ammunition_capacity = 6
+reload_time = 4.0
+maximum_range = 900.0
+fire_interval = 0.5
+heat_per_shot = 8.0
+missile_profile = ExtResource("3_missile")

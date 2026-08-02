@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="TacticalPilotProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/tactical_pilot_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+prefer_railgun = true
+fixed_cell_saturation_ratio = 0.5
+preferred_range_ratio = 0.72
+range_band_ratio = 0.08
+minimum_range_band = 35.0

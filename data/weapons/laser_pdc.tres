@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponSystemProfile" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/config/weapon_system_profile.gd" id="1_system"]
+[ext_resource type="Resource" path="res://data/weapon_mounts/turret.tres" id="2_mount"]
+
+[resource]
+script = ExtResource("1_system")
+display_name = "PDC laser"
+family = 1
+tactical_role = 0
+mount_profile = ExtResource("2_mount")
+feed_type = 2
+launcher_count = 1
+loader_count = 0
+ammunition_capacity = 0
+reload_time = 0.0
+maximum_range = 150.0
+fire_interval = 0.10
+heat_per_shot = 2.4
+damage = 7.0

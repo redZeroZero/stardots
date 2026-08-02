@@ -4,7 +4,7 @@ Les valeurs de combat modifiables sont regroupées dans `data/balance/`. Les fic
 
 ## Profils disponibles
 
-- `default_unit.tres` : équipage, vitesse tactique, accélérations linéaire et angulaire, portée des capteurs, portée et puissance PDC, coque, délai entre deux missiles et capacité du magasin.
+- `default_unit.tres` : équipage, vitesse tactique, doctrine et capacités de propulsion, accélérations linéaire et angulaire, portée des capteurs, portée et puissance PDC, coque, délai entre deux missiles et capacité du magasin.
 - `default_missile.tres` : vitesse, autonomie, guidage terminal, fusée de proximité, dégâts, fragmentation et résistance au PDC.
 - `match_rules.tres` : capture du relais, capteur du relais, durée de contrôle nécessaire et cadence de décision de l'IA.
 
@@ -192,3 +192,102 @@ de passage à chaque waypoint selon l'angle du virage, le rayon préféré,
 l'accélération disponible et la longueur du segment suivant. Le pilote commence
 ensuite sa transition vers le vecteur de sortie avant d'atteindre le point. La
 vitesse planifiée du prochain waypoint apparaît dans l'inspecteur de sélection.
+
+Le cap de coque suit la tangente de la route et reste stable sur un segment
+rectiligne. L'accélération, le freinage et l'annulation de dérive utilisent les
+propulseurs de manœuvre dans la limite d'accélération du profil, sans retourner
+le bâtiment à chaque correction de vitesse. À un waypoint, la coque anticipe
+progressivement le cap du segment sortant. Ce cap simulé pourra servir
+directement de référence aux futurs arcs de tir.
+
+## Propulsion et doctrines technologiques
+
+Les capacités sont stockées dans des ressources `PropulsionProfile` réutilisables
+par plusieurs classes de bâtiment. Les profils actuellement disponibles sont
+`main_drive`, `vector_drive`, `hybrid_drive` et `awacs_vector_drive`. Chaque
+profil sépare les capacités matérielles de la doctrine du pilote. Les
+coefficients de poussée avant, rétrograde et latérale décrivent le matériel sans
+l'associer encore à une faction. Trois doctrines sont disponibles :
+
+- `FLIP_AND_BURN` aligne la coque sur les accélérations importantes et effectue
+  un retournement stable pour exploiter le moteur principal au freinage ;
+- `HOLD_ATTITUDE` maintient le cap de route et s'appuie sur les propulseurs
+  rétrogrades et latéraux ;
+- `HYBRID` commence par rétrofreiner en maintenant son cap, puis effectue un
+  retournement plus tardif si le moteur principal reste nécessaire. Le ratio de
+  vitesse au retournement est réglé par `hybrid_turn_speed_ratio`.
+
+Le profil standard conserve provisoirement `HOLD_ATTITUDE` avec une poussée
+vectorielle complète. Ces valeurs servent de socle technique et ne définissent
+aucune technologie ou identité de faction définitive.
+
+Chaque segment de route possède désormais un plan de vol mis en cache. Il
+calcule à la réception de l'ordre les phases `ACCÉLÉRATION`, `CROISIÈRE`,
+`RÉTROFREINAGE`, `RETOURNEMENT` et `FREINAGE`. Pour un flip-and-burn, le début du retournement
+inclut la durée nécessaire pour faire pivoter la coque avant le point de
+freinage. Pour un hybride, le plan réserve d'abord la distance nécessaire au
+rétrofreinage, puis calcule le flip à vitesse réduite. Le plan n'est recalculé
+que lorsqu'une route ou un segment change.
+
+Le benchmark headless de navigation sur 400 ticks mesure environ `0,44 ms` par
+tick pour 100 unités, `1,30 ms` pour 250 et `2,92 ms` pour 500 sur la machine de
+développement. Après branchement du pilote tactique, le benchmark de bataille
+complète mesure environ `45 ms` par tick pour 500 unités et 50 missiles,
+capteurs, IA et PDC inclus. Les missiles sont indexés spatialement pour la
+défense proche et la signature thermique d'une cible n'est calculée qu'une fois
+par passe capteur.
+
+## Systèmes d'armes et emplacements
+
+Un angle de `0°` regarde la proue, `-90°` bâbord, `90°` tribord et `180°` la
+poupe. Cinq ressources de montage servent de choix initiaux :
+
+- batterie avant fixe : secteur de `60°` ;
+- bordées bâbord et tribord : secteurs de `120°` ;
+- batterie arrière fixe : secteur de `60°` ;
+- tourelle : couverture `360°` et vitesse de rotation configurable.
+
+Chaque profil peut devenir `CUSTOM` en réglant son centre, sa largeur, son
+caractère fixe ou traversable et sa vitesse de rotation. Les arcs tournent avec
+la coque et bloquent réellement un tir hors secteur ; la distance minimale est
+également appliquée. L'interface dessine chaque secteur et indique si un ordre
+échoue faute d'arc, de portée, de piste ou de disponibilité.
+
+Le catalogue initial contient sept `WeaponSystemProfile` : PDC cinétique
+fragmentant, PDC laser, missile intercepteur court, tubes antinavires moyens,
+cellules antinavires fixes, cellules longue portée et railgun axial moyen. Les
+tubes utilisent un magasin ; les cellules offrent une forte cadence initiale,
+mais chaque départ consomme définitivement une cellule. Le laser consomme de la
+chaleur plutôt que des munitions. Les défenses attaquent automatiquement les
+menaces entrantes ; railgun et missiles antinavires répondent à l'ordre de zone.
+
+La sélection offensive utilise `W` pour autoriser automatiquement toutes les
+armes, uniquement les missiles ou uniquement les railguns. La doctrine utilise
+`D` : `ÉCONOMIE` arrête l'ordre après le premier tir de la formation, `SALVE`
+autorise un tir par bâtiment, et `SATURATION` déclenche toutes les armes et
+cellules prêtes. Une batterie fixe suit toujours la coque. Une tourelle conserve
+un cap relatif indépendant, poursuit son point de visée à la vitesse configurée
+et ne tire qu'une fois dans sa tolérance angulaire. Sa direction instantanée est
+dessinée à l'intérieur de son enveloppe de rotation.
+
+Une saturation n'empile plus les projectiles sur une trajectoire unique. Le
+calculateur attribue des couloirs latéraux espacés de `52` unités et distribue
+les missiles à tour de rôle entre toutes les cibles valides de la zone. Les
+couloirs convergent au passage en guidage terminal. La fusée de proximité reste
+désarmée pendant les `55` premières unités de vol, ce qui protège le lanceur et
+la formation au départ de la salve.
+
+## Pilote tactique adverse
+
+Le planificateur de combat est indépendant du camp, mais seul l'adversaire
+l'appelle actuellement. Le joueur conserve donc le contrôle intégral de ses
+routes, caps et ordres de feu. Pour chaque cible suivie, le pilote IA choisit un
+système antinavire disponible, calcule une bande autour de sa portée préférée,
+rejoint cette bande et aligne la coque si l'arme possède un secteur fixe. Un VLS
+omnidirectionnel n'impose aucun changement de cap.
+
+Les réglages sont externalisés dans `data/ai/default_tactical_pilot.tres` :
+priorité railgun/missile, ratio de portée préférée, largeur de bande et seuil de
+saturation des cellules fixes. Le scénario `--ai-demo` oppose ce groupe à une
+frégate missile, un railgun et un AWACS bleus. Les bâtiments bleus sont mobiles,
+indestructibles, armés et exclusivement commandés par le joueur.

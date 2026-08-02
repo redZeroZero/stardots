@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PropulsionProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/propulsion_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+display_name = "Propulsion vectorielle lourde"
+tactical_speed_limit = 82.0
+drive_acceleration = 34.0
+forward_thrust_multiplier = 1.0
+retrograde_thrust_multiplier = 1.0
+lateral_thrust_multiplier = 1.0
+maximum_angular_speed_degrees = 72.0
+angular_acceleration_degrees = 125.0
+doctrine = 1

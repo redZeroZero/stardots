@@ -1,21 +1,39 @@
 class_name UnitProfile
 extends Resource
 
+enum PropulsionDoctrine {
+	FLIP_AND_BURN,
+	HOLD_ATTITUDE,
+	HYBRID,
+}
+
 @export_category("Identité")
 @export var display_name: String = "Bâtiment standard"
 @export var tactical_role: String = "FRÉGATE"
 @export var crewed: bool = true
 
 @export_category("Mobilité")
+@export var propulsion_profile: PropulsionProfile
+# Compatibilité des anciens profils sans ressource de propulsion dédiée.
 @export var tactical_speed_limit: float = 95.0
 @export var drive_acceleration: float = 48.0
 @export var crew_safe_acceleration: float = 38.0
+@export var propulsion_doctrine: PropulsionDoctrine = PropulsionDoctrine.HOLD_ATTITUDE
+@export_range(0.0, 1.0, 0.05) var forward_thrust_multiplier: float = 1.0
+@export_range(0.0, 1.0, 0.05) var retrograde_thrust_multiplier: float = 1.0
+@export_range(0.0, 1.0, 0.05) var lateral_thrust_multiplier: float = 1.0
+@export_range(0.1, 1.0, 0.05) var hybrid_flip_threshold: float = 0.65
+@export_range(0.1, 1.0, 0.05) var hybrid_turn_speed_ratio: float = 0.65
 @export var maximum_angular_speed_degrees: float = 100.0
 @export var angular_acceleration_degrees: float = 180.0
 @export var arrival_radius: float = 5.0
 @export var station_keeping_speed: float = 8.0
 @export var preferred_turn_radius: float = 90.0
 @export_range(0.2, 1.5, 0.05) var turn_anticipation: float = 0.75
+
+@export_category("Emplacements d'armes")
+@export var weapon_mount_profiles: Array[WeaponMountProfile] = []
+@export var weapon_system_profiles: Array[WeaponSystemProfile] = []
 
 @export_category("Capteurs")
 @export var sensor_range: float = 420.0

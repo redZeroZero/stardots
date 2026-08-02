@@ -67,24 +67,26 @@ func _draw() -> void:
 	for unit in friendly_units:
 		if not is_instance_valid(unit) or unit.destroyed:
 			continue
-		draw_circle(_world_to_map(unit.global_position), 3.2, Color("59d8ff"))
+		_draw_friendly_symbol(_world_to_map(unit.global_position), unit.rotation)
 
 	var enemy_units: Array = tactical_root.get("enemy_units")
 	for unit in enemy_units:
 		if not is_instance_valid(unit) or unit.destroyed or unit.intel_state == TacticalUnit.IntelState.HIDDEN:
 			continue
 		var contact_position: Vector2 = unit.global_position
-		var contact_color := Color("ffbd48")
-		var radius: float = 2.5
 		if unit.intel_state == TacticalUnit.IntelState.SIGNAL:
 			contact_position += unit.contact_offset
-		elif unit.intel_state == TacticalUnit.IntelState.TRACKED:
-			contact_color = Color("ff9f43")
-			radius = 3.0
-		else:
-			contact_color = Color("ff5d6c")
-			radius = 3.2
-		draw_circle(_world_to_map(contact_position), radius, contact_color)
+		_draw_contact_symbol(_world_to_map(contact_position), unit.intel_state, unit.rotation)
+
+	var missiles_layer: Node2D = tactical_root.get("missiles_layer")
+	for missile in missiles_layer.get_children():
+		if not is_instance_valid(missile) or not missile.is_interceptable():
+			continue
+		_draw_missile_symbol(
+			_world_to_map(missile.global_position),
+			missile.velocity.normalized(),
+			missile.team_id != 0
+		)
 
 	var camera: Camera2D = tactical_root.get("tactical_camera")
 	var visible_world_size: Vector2 = get_viewport_rect().size / camera.zoom
@@ -103,3 +105,55 @@ func _world_to_map(world_position: Vector2) -> Vector2:
 
 func _world_radius_to_map(world_radius: float) -> float:
 	return world_radius / world_rect.size.x * size.x
+
+
+func _draw_friendly_symbol(center: Vector2, heading: float) -> void:
+	var forward := Vector2.UP.rotated(heading)
+	var side := forward.rotated(PI * 0.5)
+	var points := PackedVector2Array([
+		center + forward * 4.5,
+		center - forward * 3.0 + side * 3.2,
+		center - forward * 3.0 - side * 3.2,
+	])
+	draw_polyline(points + PackedVector2Array([points[0]]), Color(0.01, 0.02, 0.035, 0.95), 3.5)
+	draw_polyline(points + PackedVector2Array([points[0]]), Color("59d8ff"), 1.6)
+
+
+func _draw_contact_symbol(center: Vector2, intel_state: int, heading: float) -> void:
+	var halo := Color(0.01, 0.02, 0.035, 0.95)
+	if intel_state == TacticalUnit.IntelState.SIGNAL:
+		draw_arc(center, 4.0, -PI * 0.35, PI * 1.35, 12, halo, 3.5)
+		draw_arc(center, 4.0, -PI * 0.35, PI * 1.35, 12, Color("ffbd48"), 1.6)
+		draw_line(center + Vector2(-2.0, 0.0), center + Vector2(2.0, 0.0), Color("ffbd48"), 1.2)
+		return
+	if intel_state == TacticalUnit.IntelState.TRACKED:
+		var diamond := PackedVector2Array([
+			center + Vector2(0.0, -4.0), center + Vector2(4.0, 0.0),
+			center + Vector2(0.0, 4.0), center + Vector2(-4.0, 0.0),
+		])
+		draw_polyline(diamond + PackedVector2Array([diamond[0]]), halo, 3.5)
+		draw_polyline(diamond + PackedVector2Array([diamond[0]]), Color("ff9f43"), 1.6)
+		return
+	var forward := Vector2.UP.rotated(heading)
+	var side := forward.rotated(PI * 0.5)
+	var triangle := PackedVector2Array([
+		center + forward * 4.5,
+		center - forward * 3.0 + side * 3.5,
+		center - forward * 3.0 - side * 3.5,
+	])
+	draw_colored_polygon(PackedVector2Array([
+		center + (triangle[0] - center) * 1.35,
+		center + (triangle[1] - center) * 1.35,
+		center + (triangle[2] - center) * 1.35,
+	]), halo)
+	draw_colored_polygon(triangle, Color("ff5d6c"))
+
+
+func _draw_missile_symbol(center: Vector2, direction: Vector2, hostile: bool) -> void:
+	if direction == Vector2.ZERO:
+		direction = Vector2.UP
+	var missile_color := Color("ff784f") if hostile else Color("64ddff")
+	var start: Vector2 = center - direction * 3.0
+	var end: Vector2 = center + direction * (4.5 if hostile else 3.5)
+	draw_line(start, end, Color(0.01, 0.02, 0.035, 0.95), 3.5)
+	draw_line(start, end, missile_color, 1.8)

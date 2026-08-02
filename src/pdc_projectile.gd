@@ -7,6 +7,7 @@ var damage: float = 0.0
 var hit_radius: float = 3.0
 var lifetime_remaining: float = 0.0
 var previous_position: Vector2
+var visual_zoom: float = 1.0
 
 
 func launch(
@@ -52,6 +53,18 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 
 
+func set_visual_zoom(value: float) -> void:
+	var clamped_value: float = maxf(value, 0.001)
+	if is_equal_approx(visual_zoom, clamped_value):
+		return
+	visual_zoom = clamped_value
+	queue_redraw()
+
+
 func _draw() -> void:
-	draw_line(Vector2(-8.0, 0.0), Vector2(3.0, 0.0), Color(1.0, 0.83, 0.30, 0.32), 2.0)
-	draw_circle(Vector2.ZERO, 1.8, Color("ffe28a"))
+	if TacticalPresentation.detail_level(visual_zoom) == TacticalPresentation.DetailLevel.STRATEGIC:
+		return
+	var stroke: float = TacticalPresentation.stroke_width(2.0, visual_zoom)
+	var point_radius: float = TacticalPresentation.compensated_radius(1.8, 2.0, visual_zoom)
+	draw_line(Vector2(-8.0, 0.0), Vector2(3.0, 0.0), Color(1.0, 0.83, 0.30, 0.32), stroke)
+	draw_circle(Vector2.ZERO, point_radius, Color("ffe28a"))

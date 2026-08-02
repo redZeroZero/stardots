@@ -1,12 +1,17 @@
-[gd_resource type="Resource" script_class="UnitProfile" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="UnitProfile" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://src/config/unit_profile.gd" id="1_profile"]
+[ext_resource type="Resource" path="res://data/propulsion/vector_drive.tres" id="2_propulsion"]
+[ext_resource type="Resource" path="res://data/weapons/kinetic_pdc.tres" id="3_pdc"]
+[ext_resource type="Resource" path="res://data/weapons/medium_missile_tubes.tres" id="4_missiles"]
 
 [resource]
 script = ExtResource("1_profile")
 display_name = "Frégate lance-missiles"
 tactical_role = "FRÉGATE"
 crewed = true
+propulsion_profile = ExtResource("2_propulsion")
+weapon_system_profiles = Array[Resource]([ExtResource("3_pdc"), ExtResource("4_missiles")])
 tactical_speed_limit = 95.0
 drive_acceleration = 48.0
 crew_safe_acceleration = 38.0
