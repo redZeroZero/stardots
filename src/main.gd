@@ -769,21 +769,80 @@ func _end_match(winning_team: int) -> void:
 
 
 func _update_sensor_picture() -> void:
+	_update_automatic_radio_emissions()
 	_begin_sensor_pass()
-	var best_friendly_observations := PackedFloat64Array()
-	best_friendly_observations.resize(friendly_units.size())
-	best_friendly_observations.fill(INF)
-	var best_enemy_observations := PackedFloat64Array()
-	best_enemy_observations.resize(enemy_units.size())
-	best_enemy_observations.fill(INF)
+	var best_friendly_active := _infinite_float_array(friendly_units.size())
+	var best_friendly_passive := _infinite_float_array(friendly_units.size())
+	var best_enemy_active := _infinite_float_array(enemy_units.size())
+	var best_enemy_passive := _infinite_float_array(enemy_units.size())
+	var friendly_observer_counts: Array[int] = []
+	friendly_observer_counts.resize(friendly_units.size())
+	friendly_observer_counts.fill(0)
+	var enemy_observer_counts: Array[int] = []
+	enemy_observer_counts.resize(enemy_units.size())
+	enemy_observer_counts.fill(0)
+	var friendly_triangulation: Array[float] = []
+	friendly_triangulation.resize(friendly_units.size())
+	friendly_triangulation.fill(0.0)
+	var enemy_triangulation: Array[float] = []
+	enemy_triangulation.resize(enemy_units.size())
+	enemy_triangulation.fill(0.0)
+	var friendly_channels := PackedInt32Array()
+	friendly_channels.resize(friendly_units.size())
+	var enemy_channels := PackedInt32Array()
+	enemy_channels.resize(enemy_units.size())
+	var first_friendly_observer: Array[Vector2] = []
+	first_friendly_observer.resize(friendly_units.size())
+	first_friendly_observer.fill(Vector2.ZERO)
+	var first_enemy_observer: Array[Vector2] = []
+	first_enemy_observer.resize(enemy_units.size())
+	first_enemy_observer.fill(Vector2.ZERO)
 	var friendly_signatures := PackedFloat64Array()
 	friendly_signatures.resize(friendly_units.size())
 	var enemy_signatures := PackedFloat64Array()
 	enemy_signatures.resize(enemy_units.size())
+	var friendly_emissions := PackedFloat64Array()
+	friendly_emissions.resize(friendly_units.size())
+	var enemy_emissions := PackedFloat64Array()
+	enemy_emissions.resize(enemy_units.size())
+	var friendly_passive_ranges_squared := PackedFloat64Array()
+	friendly_passive_ranges_squared.resize(friendly_units.size())
+	var enemy_passive_ranges_squared := PackedFloat64Array()
+	enemy_passive_ranges_squared.resize(enemy_units.size())
+	var friendly_active_ranges_squared := PackedFloat64Array()
+	friendly_active_ranges_squared.resize(friendly_units.size())
+	var enemy_active_ranges_squared := PackedFloat64Array()
+	enemy_active_ranges_squared.resize(enemy_units.size())
+	var friendly_radio_ranges_squared := PackedFloat64Array()
+	friendly_radio_ranges_squared.resize(friendly_units.size())
+	var enemy_radio_ranges_squared := PackedFloat64Array()
+	enemy_radio_ranges_squared.resize(enemy_units.size())
 	for friendly_index: int in friendly_units.size():
-		friendly_signatures[friendly_index] = friendly_units[friendly_index].get_thermal_signature()
+		var friendly: TacticalUnitScene = friendly_units[friendly_index]
+		friendly_signatures[friendly_index] = friendly.get_thermal_signature()
+		friendly_emissions[friendly_index] = friendly.get_electromagnetic_signature()
+		friendly_passive_ranges_squared[friendly_index] = friendly.sensor_range * friendly.sensor_range
+		friendly_active_ranges_squared[friendly_index] = (
+			friendly.active_sensor_range * friendly.active_sensor_range
+			if friendly.sensor_mode == TacticalUnitScene.SensorMode.ACTIVE
+			else 0.0
+		)
+		friendly_radio_ranges_squared[friendly_index] = (
+			friendly.active_emission_detection_range * friendly.active_emission_detection_range
+		)
 	for enemy_index: int in enemy_units.size():
-		enemy_signatures[enemy_index] = enemy_units[enemy_index].get_thermal_signature()
+		var enemy: TacticalUnitScene = enemy_units[enemy_index]
+		enemy_signatures[enemy_index] = enemy.get_thermal_signature()
+		enemy_emissions[enemy_index] = enemy.get_electromagnetic_signature()
+		enemy_passive_ranges_squared[enemy_index] = enemy.sensor_range * enemy.sensor_range
+		enemy_active_ranges_squared[enemy_index] = (
+			enemy.active_sensor_range * enemy.active_sensor_range
+			if enemy.sensor_mode == TacticalUnitScene.SensorMode.ACTIVE
+			else 0.0
+		)
+		enemy_radio_ranges_squared[enemy_index] = (
+			enemy.active_emission_detection_range * enemy.active_emission_detection_range
+		)
 
 	for friendly_index: int in friendly_units.size():
 		var friendly: TacticalUnitScene = friendly_units[friendly_index]
@@ -794,24 +853,69 @@ func _update_sensor_picture() -> void:
 			if enemy.destroyed:
 				continue
 			var distance_squared: float = friendly.global_position.distance_squared_to(enemy.global_position)
-			best_enemy_observations[enemy_index] = minf(
-				best_enemy_observations[enemy_index],
-				_sensor_range_ratio_squared_at_distance(
-					friendly,
-					enemy,
-					enemy_signatures[enemy_index],
-					distance_squared
-				)
+			var friendly_thermal: float = distance_squared / maxf(
+				friendly_passive_ranges_squared[friendly_index]
+				* enemy_signatures[enemy_index] * enemy_signatures[enemy_index],
+				0.0001
 			)
-			best_friendly_observations[friendly_index] = minf(
-				best_friendly_observations[friendly_index],
-				_sensor_range_ratio_squared_at_distance(
-					enemy,
-					friendly,
-					friendly_signatures[friendly_index],
-					distance_squared
+			var friendly_radio: float = INF
+			if enemy_emissions[enemy_index] > 0.0:
+				friendly_radio = distance_squared / maxf(
+					friendly_radio_ranges_squared[friendly_index] * enemy_emissions[enemy_index],
+					0.0001
 				)
+			var friendly_passive: float = minf(friendly_thermal, friendly_radio)
+			best_enemy_passive[enemy_index] = minf(best_enemy_passive[enemy_index], friendly_passive)
+			if friendly_active_ranges_squared[friendly_index] > 0.0:
+				best_enemy_active[enemy_index] = minf(
+					best_enemy_active[enemy_index],
+					distance_squared / friendly_active_ranges_squared[friendly_index]
+				)
+			if friendly_thermal <= 1.0:
+				enemy_channels[enemy_index] |= SensorTrackLogic.Channel.THERMAL
+			if friendly_radio <= 1.0:
+				enemy_channels[enemy_index] |= SensorTrackLogic.Channel.RADIO
+			if friendly_passive <= 1.0:
+				_register_triangulation_observer(
+					enemy.global_position,
+					friendly.global_position,
+					enemy_index,
+					enemy_observer_counts,
+					enemy_triangulation,
+					first_enemy_observer
+				)
+
+			var enemy_thermal: float = distance_squared / maxf(
+				enemy_passive_ranges_squared[enemy_index]
+				* friendly_signatures[friendly_index] * friendly_signatures[friendly_index],
+				0.0001
 			)
+			var enemy_radio: float = INF
+			if friendly_emissions[friendly_index] > 0.0:
+				enemy_radio = distance_squared / maxf(
+					enemy_radio_ranges_squared[enemy_index] * friendly_emissions[friendly_index],
+					0.0001
+				)
+			var enemy_passive: float = minf(enemy_thermal, enemy_radio)
+			best_friendly_passive[friendly_index] = minf(best_friendly_passive[friendly_index], enemy_passive)
+			if enemy_active_ranges_squared[enemy_index] > 0.0:
+				best_friendly_active[friendly_index] = minf(
+					best_friendly_active[friendly_index],
+					distance_squared / enemy_active_ranges_squared[enemy_index]
+				)
+			if enemy_thermal <= 1.0:
+				friendly_channels[friendly_index] |= SensorTrackLogic.Channel.THERMAL
+			if enemy_radio <= 1.0:
+				friendly_channels[friendly_index] |= SensorTrackLogic.Channel.RADIO
+			if enemy_passive <= 1.0:
+				_register_triangulation_observer(
+					friendly.global_position,
+					enemy.global_position,
+					friendly_index,
+					friendly_observer_counts,
+					friendly_triangulation,
+					first_friendly_observer
+				)
 
 	if objective_station != null and objective_station.team_id == 0:
 		for enemy_index: int in enemy_units.size():
@@ -823,16 +927,98 @@ func _update_sensor_picture() -> void:
 				station_range * station_range,
 				0.0001
 			)
-			best_enemy_observations[enemy_index] = minf(
-				best_enemy_observations[enemy_index],
+			best_enemy_active[enemy_index] = minf(
+				best_enemy_active[enemy_index],
 				station_ratio_squared
 			)
 
 	for enemy_index: int in enemy_units.size():
-		_record_sensor_observation(0, enemy_units[enemy_index], best_enemy_observations[enemy_index])
+		_record_sensor_observation(
+			0, enemy_units[enemy_index], best_enemy_active[enemy_index],
+			best_enemy_passive[enemy_index], enemy_observer_counts[enemy_index],
+			enemy_triangulation[enemy_index], enemy_channels[enemy_index]
+		)
 	for friendly_index: int in friendly_units.size():
-		_record_sensor_observation(1, friendly_units[friendly_index], best_friendly_observations[friendly_index])
+		_record_sensor_observation(
+			1, friendly_units[friendly_index], best_friendly_active[friendly_index],
+			best_friendly_passive[friendly_index], friendly_observer_counts[friendly_index],
+			friendly_triangulation[friendly_index], friendly_channels[friendly_index]
+		)
 	_sync_player_sensor_picture()
+
+
+func _infinite_float_array(size: int) -> PackedFloat64Array:
+	var values := PackedFloat64Array()
+	values.resize(size)
+	values.fill(INF)
+	return values
+
+
+func _register_triangulation_observer(
+	target_position: Vector2,
+	observer_position: Vector2,
+	target_index: int,
+	observer_counts: Array[int],
+	triangulation_quality: Array[float],
+	first_observer_positions: Array[Vector2]
+) -> void:
+	if observer_counts[target_index] == 0:
+		first_observer_positions[target_index] = observer_position
+	else:
+		var first_direction: Vector2 = first_observer_positions[target_index].direction_to(target_position)
+		var new_direction: Vector2 = observer_position.direction_to(target_position)
+		var crossing_angle_quality: float = clampf(absf(first_direction.cross(new_direction)) * 2.0, 0.0, 1.0)
+		triangulation_quality[target_index] = maxf(
+			triangulation_quality[target_index],
+			crossing_angle_quality
+		)
+	observer_counts[target_index] += 1
+
+
+func _update_automatic_radio_emissions() -> void:
+	for unit: TacticalUnitScene in friendly_units + enemy_units:
+		unit.set_datalink_emission_mode(TacticalUnitScene.DatalinkEmissionMode.SILENT)
+	for team_id: int in 2:
+		var allies: Array[TacticalUnitScene] = friendly_units if team_id == 0 else enemy_units
+		var team_tracks: Dictionary = sensor_tracks_by_team[team_id]
+		for provider: TacticalUnitScene in allies:
+			if provider.destroyed or not provider.unit_profile.provides_fire_control:
+				continue
+			if not _provider_has_linked_ally(provider, allies):
+				continue
+			var has_shared_track: bool = false
+			var has_fire_control_track: bool = false
+			for track in team_tracks.values():
+				if track.get_state() >= SensorTrackLogic.State.SIGNAL:
+					has_shared_track = true
+				if track.has_fire_control_quality(FIRE_CONTROL_MAXIMUM_UNCERTAINTY):
+					has_fire_control_track = true
+					break
+			if has_fire_control_track and _provider_has_linked_armed_ally(provider, allies):
+				provider.set_datalink_emission_mode(TacticalUnitScene.DatalinkEmissionMode.FIRE_CONTROL)
+			elif has_shared_track:
+				provider.set_datalink_emission_mode(TacticalUnitScene.DatalinkEmissionMode.TRACK_SHARING)
+
+
+func _provider_has_linked_ally(provider: TacticalUnitScene, allies: Array[TacticalUnitScene]) -> bool:
+	for ally: TacticalUnitScene in allies:
+		if ally != provider and not ally.destroyed and ally.global_position.distance_to(provider.global_position) <= provider.unit_profile.fire_control_share_range:
+			return true
+	return false
+
+
+func _provider_has_linked_armed_ally(provider: TacticalUnitScene, allies: Array[TacticalUnitScene]) -> bool:
+	for ally: TacticalUnitScene in allies:
+		if ally == provider or ally.destroyed:
+			continue
+		if ally.global_position.distance_to(provider.global_position) > provider.unit_profile.fire_control_share_range:
+			continue
+		if (
+			ally.get_weapon_system(WeaponSystemProfile.Family.RAILGUN) != null
+			or ally.get_weapon_system(WeaponSystemProfile.Family.MISSILE, WeaponSystemProfile.TacticalRole.ANTI_SHIP) != null
+		):
+			return true
+	return false
 
 
 func _begin_sensor_pass() -> void:
@@ -844,7 +1030,11 @@ func _begin_sensor_pass() -> void:
 func _record_sensor_observation(
 	observer_team_id: int,
 	target: TacticalUnitScene,
-	best_range_ratio_squared: float
+	best_active_ratio_squared: float,
+	best_passive_ratio_squared: float,
+	observer_count: int,
+	triangulation_quality: float,
+	observation_channels: int
 ) -> void:
 	if target.destroyed:
 		return
@@ -852,22 +1042,55 @@ func _record_sensor_observation(
 	var base_uncertainty: float = SensorTrackLogic.MAXIMUM_UNCERTAINTY
 	var observed_position: Vector2 = target.global_position
 	var observed_velocity: Vector2 = target.velocity
-	if best_range_ratio_squared <= 0.36 * 0.36:
+	if best_active_ratio_squared <= 0.36 * 0.36:
 		observed_state = SensorTrackLogic.State.IDENTIFIED
 		base_uncertainty = 2.0
-	elif best_range_ratio_squared <= 0.68 * 0.68:
+		observation_channels |= SensorTrackLogic.Channel.ACTIVE_RADAR
+	elif best_active_ratio_squared <= 0.68 * 0.68:
 		observed_state = SensorTrackLogic.State.TRACKED
 		base_uncertainty = 14.0
-	elif best_range_ratio_squared <= 1.0:
+		observation_channels |= SensorTrackLogic.Channel.ACTIVE_RADAR
+	elif best_active_ratio_squared <= 1.0:
 		observed_state = SensorTrackLogic.State.SIGNAL
 		base_uncertainty = 90.0
+		observation_channels |= SensorTrackLogic.Channel.ACTIVE_RADAR
+
+	var passive_state: int = SensorTrackLogic.State.HIDDEN
+	var passive_uncertainty: float = SensorTrackLogic.MAXIMUM_UNCERTAINTY
+	var triangulated: bool = observer_count >= 2 and triangulation_quality >= 0.08
+	if best_passive_ratio_squared <= 0.68 * 0.68:
+		passive_state = SensorTrackLogic.State.TRACKED
+		passive_uncertainty = 20.0
+	elif best_passive_ratio_squared <= 1.0 and triangulated:
+		passive_state = SensorTrackLogic.State.TRACKED
+		passive_uncertainty = lerpf(55.0, 18.0, triangulation_quality)
+	elif best_passive_ratio_squared <= 1.0:
+		passive_state = SensorTrackLogic.State.SIGNAL
+		passive_uncertainty = 90.0
+	if passive_state > observed_state:
+		observed_state = passive_state
+		base_uncertainty = passive_uncertainty
+	elif passive_state == observed_state:
+		base_uncertainty = minf(base_uncertainty, passive_uncertainty)
+	if triangulated and passive_state >= SensorTrackLogic.State.TRACKED:
+		observation_channels |= SensorTrackLogic.Channel.TRIANGULATED
+
+	if observed_state == SensorTrackLogic.State.SIGNAL:
 		var phase: float = deg_to_rad(float(abs(target.callsign.hash()) % 360))
 		observed_position += Vector2.from_angle(phase) * base_uncertainty * 0.45
 		observed_velocity = Vector2.ZERO
 	if observed_state == SensorTrackLogic.State.HIDDEN:
 		return
 	var track = _get_or_create_sensor_track(observer_team_id, target)
-	track.observe(observed_state, observed_position, observed_velocity, base_uncertainty)
+	track.observe(
+		observed_state,
+		observed_position,
+		observed_velocity,
+		base_uncertainty,
+		observation_channels,
+		observer_count,
+		triangulation_quality
+	)
 
 
 func _advance_sensor_tracks(delta: float) -> void:
@@ -906,6 +1129,8 @@ func _sync_player_sensor_picture() -> void:
 	var signal_count: int = 0
 	var tracked_count: int = 0
 	var identified_count: int = 0
+	var radio_count: int = 0
+	var triangulated_count: int = 0
 	for enemy: TacticalUnitScene in enemy_units:
 		if enemy.destroyed:
 			continue
@@ -921,11 +1146,17 @@ func _sync_player_sensor_picture() -> void:
 			enemy.set_sensor_contact(TacticalUnitScene.IntelState.HIDDEN, enemy.global_position, 0.0)
 		else:
 			enemy.set_sensor_contact(new_state, track.estimated_position, track.uncertainty_radius)
+			if bool(track.last_observation_channels & SensorTrackLogic.Channel.RADIO):
+				radio_count += 1
+			if bool(track.last_observation_channels & SensorTrackLogic.Channel.TRIANGULATED):
+				triangulated_count += 1
 
-	intel_label.text = "RENSEIGNEMENT: %d SIGNAL  •  %d PISTE  •  %d IDENTIFIÉ" % [
+	intel_label.text = "RENSEIGNEMENT: %d SIGNAL  •  %d PISTE  •  %d IDENTIFIÉ  //  TRI %d  •  EM %d" % [
 		signal_count,
 		tracked_count,
 		identified_count,
+		triangulated_count,
+		radio_count,
 	]
 
 
@@ -1400,22 +1631,45 @@ func _sensor_range_ratio_squared_at_distance(
 	target_thermal_signature: float,
 	distance_squared: float
 ) -> float:
+	return minf(
+		_active_radar_ratio_squared_at_distance(sensor, distance_squared),
+		minf(
+			_thermal_ratio_squared_at_distance(sensor, target_thermal_signature, distance_squared),
+			_radio_ratio_squared_at_distance(sensor, target, distance_squared)
+		)
+	)
+
+
+func _thermal_ratio_squared_at_distance(
+	sensor: TacticalUnitScene,
+	target_thermal_signature: float,
+	distance_squared: float
+) -> float:
 	var passive_range: float = sensor.sensor_range * target_thermal_signature
-	var best_ratio_squared: float = distance_squared / maxf(passive_range * passive_range, 0.0001)
-	if sensor.sensor_mode == TacticalUnitScene.SensorMode.ACTIVE:
-		best_ratio_squared = minf(
-			best_ratio_squared,
-			distance_squared / maxf(sensor.active_sensor_range * sensor.active_sensor_range, 0.0001)
-		)
-	if target.sensor_mode == TacticalUnitScene.SensorMode.ACTIVE:
-		best_ratio_squared = minf(
-			best_ratio_squared,
-			distance_squared / maxf(
-				sensor.active_emission_detection_range * sensor.active_emission_detection_range,
-				0.0001
-			)
-		)
-	return best_ratio_squared
+	return distance_squared / maxf(passive_range * passive_range, 0.0001)
+
+
+func _active_radar_ratio_squared_at_distance(
+	sensor: TacticalUnitScene,
+	distance_squared: float
+) -> float:
+	if sensor.sensor_mode != TacticalUnitScene.SensorMode.ACTIVE:
+		return INF
+	return distance_squared / maxf(sensor.active_sensor_range * sensor.active_sensor_range, 0.0001)
+
+
+func _radio_ratio_squared_at_distance(
+	sensor: TacticalUnitScene,
+	target: TacticalUnitScene,
+	distance_squared: float
+) -> float:
+	var electromagnetic_signature: float = target.get_electromagnetic_signature()
+	if electromagnetic_signature <= 0.0:
+		return INF
+	var emission_detection_range: float = (
+		sensor.active_emission_detection_range * sqrt(electromagnetic_signature)
+	)
+	return distance_squared / maxf(emission_detection_range * emission_detection_range, 0.0001)
 
 
 func _update_point_defense(delta: float) -> void:
@@ -1639,12 +1893,13 @@ func _update_selection_details() -> void:
 			route_text = "ROUTE %d  •  V.PROCH %.0f" % [
 				unit.navigation_route.size(), unit.navigation_route[0].planned_speed,
 			]
-		selection_details_label.text = "%s  //  %s  //  %s  //  %s  •  COQUE %.0f/%.0f\nVIT %.0f/%.0f  •  ACC %.0f  •  ROT %.0f°/s  •  PROP. %s [%s]  •  PHASE %s  •  %s\nCAPT. %s %.0f  •  THERM. %s  •  CHALEUR %.0f/%.0f  •  IR %.2f\nPDC %.0f  MUN %d/%d  •  TIR %.0f  •  TUBES %d/%d  CHARGE %d  •  MISSILES %d/%d  (%s)\nARMES: %s" % [
+		selection_details_label.text = "%s  //  %s  //  %s  //  %s  •  COQUE %.0f/%.0f\nVIT %.0f/%.0f  •  ACC %.0f  •  ROT %.0f°/s  •  PROP. %s [%s]  •  PHASE %s  •  %s\nCAPT. %s %.0f  •  EM %.2f [%s]  •  THERM. %s  •  CHALEUR %.0f/%.0f  •  IR %.2f\nPDC %.0f  MUN %d/%d  •  TIR %.0f  •  TUBES %d/%d  CHARGE %d  •  MISSILES %d/%d  (%s)\nARMES: %s" % [
 			unit.callsign, unit.unit_profile.tactical_role, unit.unit_profile.display_name, crew_text,
 			unit.hull, unit.maximum_hull,
 			unit.velocity.length(), unit.move_speed, unit.maximum_acceleration,
 			rad_to_deg(unit.maximum_angular_speed), propulsion_name, unit.get_propulsion_doctrine_name(), unit.get_maneuver_phase_name(), route_text,
 			unit.get_sensor_mode_name(), unit.sensor_range,
+			unit.get_electromagnetic_signature(), unit.get_electromagnetic_emission_name(),
 			unit.get_thermal_mode_name(), unit.heat, unit.heat_capacity, unit.get_thermal_signature(),
 			unit.point_defense_range, unit.point_defense_ammunition, unit.point_defense_ammunition_capacity,
 			unit.unit_profile.missile_launch_range,

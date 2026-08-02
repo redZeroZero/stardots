@@ -19,6 +19,12 @@ enum ThermalMode {
 	COMBAT,
 }
 
+enum DatalinkEmissionMode {
+	SILENT,
+	TRACK_SHARING,
+	FIRE_CONTROL,
+}
+
 const BODY_RADIUS: float = 9.0
 const SELECTION_RADIUS: float = 15.0
 const ATTITUDE_CORRECTION_DEADZONE: float = 1.0
@@ -50,6 +56,7 @@ var active_sensor_range: float = 560.0
 var active_emission_detection_range: float = 720.0
 var active_sensor_heat_per_second: float = 4.0
 var sensor_mode: SensorMode = SensorMode.PASSIVE
+var datalink_emission_mode: DatalinkEmissionMode = DatalinkEmissionMode.SILENT
 var heat_capacity: float = 100.0
 var heat: float = 20.0
 var passive_cooling_per_second: float = 2.5
@@ -237,6 +244,36 @@ func toggle_sensor_mode() -> void:
 
 func get_sensor_mode_name() -> String:
 	return "ACTIF" if sensor_mode == SensorMode.ACTIVE else "PASSIF"
+
+
+func set_datalink_emission_mode(value: DatalinkEmissionMode) -> void:
+	datalink_emission_mode = value
+
+
+func get_electromagnetic_signature() -> float:
+	var radar_emission: float = (
+		unit_profile.active_radar_emission_strength
+		if sensor_mode == SensorMode.ACTIVE
+		else 0.0
+	)
+	var link_emission: float = 0.0
+	if datalink_emission_mode == DatalinkEmissionMode.TRACK_SHARING:
+		link_emission = unit_profile.track_link_emission_strength
+	elif datalink_emission_mode == DatalinkEmissionMode.FIRE_CONTROL:
+		link_emission = unit_profile.fire_control_link_emission_strength
+	return maxf(radar_emission, link_emission)
+
+
+func get_electromagnetic_emission_name() -> String:
+	if sensor_mode == SensorMode.ACTIVE and datalink_emission_mode == DatalinkEmissionMode.FIRE_CONTROL:
+		return "RADAR + CONDUITE"
+	if sensor_mode == SensorMode.ACTIVE:
+		return "RADAR ACTIF"
+	if datalink_emission_mode == DatalinkEmissionMode.FIRE_CONTROL:
+		return "CONDUITE DE TIR"
+	if datalink_emission_mode == DatalinkEmissionMode.TRACK_SHARING:
+		return "PARTAGE PISTES"
+	return "SILENCE RADIO"
 
 
 func get_propulsion_doctrine_name() -> String:

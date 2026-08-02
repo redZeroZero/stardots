@@ -43,6 +43,11 @@ enum PropulsionDoctrine {
 @export var provides_fire_control: bool = false
 @export var fire_control_share_range: float = 0.0
 
+@export_category("Émissions électromagnétiques")
+@export var active_radar_emission_strength: float = 1.0
+@export var track_link_emission_strength: float = 0.25
+@export var fire_control_link_emission_strength: float = 0.55
+
 @export_category("Thermique")
 @export var heat_capacity: float = 100.0
 @export var initial_heat: float = 20.0

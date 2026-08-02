@@ -258,6 +258,19 @@ bleu/rouge n'est calculée qu'une fois, puis sert aux deux directions de
 détection. Le vieillissement entre deux passes reste linéaire dans le nombre de
 pistes existantes.
 
+Les capteurs passifs exploitent maintenant deux signatures distinctes : la
+chaleur et les émissions radio. Un radar actif, un partage de pistes AWACS et
+une liaison de conduite de tir rendent automatiquement leur porteur détectable,
+avec une intensité propre au profil du bâtiment. L'AWACS reste silencieux sans
+allié relié, partage ses pistes dès qu'il possède un contact et passe au flux de
+conduite de tir lorsqu'une arme alliée peut exploiter une solution précise.
+
+Deux observateurs passifs qui voient le même contact combinent leurs
+relèvements. Un angle de croisement suffisant transforme un signal lointain en
+piste, avec une incertitude qui diminue lorsque la géométrie s'améliore. Le
+bandeau résume ces origines par `TRI` et `EM`, sans ajouter de nouveaux anneaux ;
+la fiche d'une unité sélectionnée affiche son niveau et son régime d'émission.
+
 ## Systèmes d'armes et emplacements
 
 Un angle de `0°` regarde la proue, `-90°` bâbord, `90°` tribord et `180°` la

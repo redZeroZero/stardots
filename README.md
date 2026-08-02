@@ -82,6 +82,11 @@ position est propagée selon son vecteur connu, les quatre crochets orange
 montrent l'incertitude croissante, puis la piste devient signal avant de
 disparaître.
 
+Dans `--ai-demo`, sélectionnez `EYE-BLEU` pour suivre son émission automatique :
+silence radio, partage de pistes, puis conduite de tir selon les contacts et les
+alliés reliés. Le bandeau renseignement compte aussi les pistes obtenues par
+triangulation (`TRI`) et par détection d'une émission (`EM`).
+
 Pour exécuter les tests de charge principaux :
 
 ```bash

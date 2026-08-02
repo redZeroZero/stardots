@@ -13,6 +13,8 @@ func _run() -> void:
 	_test_track_prediction_and_aging(failures)
 	_test_battlefield_fusion(failures)
 	_test_sensor_demo(failures)
+	_test_automatic_awacs_emission(failures)
+	_test_passive_triangulation(failures)
 	if not failures.is_empty():
 		for failure: String in failures:
 			push_error(failure)
@@ -65,9 +67,9 @@ func _test_battlefield_fusion(failures: Array[String]) -> void:
 	battle._update_sensor_picture()
 	var friendly_track = battle._get_sensor_track(0, enemy)
 	var enemy_track = battle._get_sensor_track(1, friendly)
-	if friendly_track == null or friendly_track.get_state() != SENSOR_TRACK_SCRIPT.State.IDENTIFIED:
+	if friendly_track == null or friendly_track.get_state() != SENSOR_TRACK_SCRIPT.State.TRACKED:
 		failures.append("le camp bleu ne fusionne pas son observation proche")
-	if enemy_track == null or enemy_track.get_state() != SENSOR_TRACK_SCRIPT.State.IDENTIFIED:
+	if enemy_track == null or enemy_track.get_state() != SENSOR_TRACK_SCRIPT.State.TRACKED:
 		failures.append("le camp rouge ne possède pas son propre tableau de pistes")
 
 	enemy.global_position = Vector2(3000.0, 0.0)
@@ -112,4 +114,64 @@ func _test_sensor_demo(failures: Array[String]) -> void:
 	]:
 		if not observed_states.has(expected_state):
 			failures.append("le scénario capteurs ne traverse pas l'état de renseignement %d" % expected_state)
+	battle.free()
+
+
+func _test_automatic_awacs_emission(failures: Array[String]) -> void:
+	var battle = BATTLE_SCENE.instantiate()
+	battle.benchmark_empty_scenario = true
+	root.add_child(battle)
+	battle.set_process(false)
+	battle.set_physics_process(false)
+	var awacs_profile: UnitProfile = load("res://data/balance/awacs_unit.tres").duplicate(true)
+	var frigate_profile: UnitProfile = load("res://data/balance/default_unit.tres").duplicate(true)
+	var awacs: TacticalUnit = battle._spawn_unit("EYE", 0, Vector2.ZERO, awacs_profile)
+	var frigate: TacticalUnit = battle._spawn_unit("TIREUR", 0, Vector2(100.0, 0.0), frigate_profile)
+	var emitter_hunter: TacticalUnit = battle._spawn_unit("VEILLE ROUGE", 1, Vector2(500.0, 0.0), frigate_profile)
+	awacs.sensor_mode = TacticalUnit.SensorMode.PASSIVE
+	battle._update_sensor_picture()
+	battle._update_sensor_picture()
+	if awacs.datalink_emission_mode != TacticalUnit.DatalinkEmissionMode.FIRE_CONTROL:
+		failures.append("l'AWACS ne passe pas automatiquement en émission de conduite de tir")
+	if not is_equal_approx(awacs.get_electromagnetic_signature(), awacs_profile.fire_control_link_emission_strength):
+		failures.append("le flux électromagnétique AWACS ne suit pas son profil")
+	var hostile_track = battle._get_sensor_track(1, awacs)
+	if hostile_track == null or not bool(hostile_track.last_observation_channels & SENSOR_TRACK_SCRIPT.Channel.RADIO):
+		failures.append("le camp adverse ne détecte pas la liaison AWACS par radio passive")
+	frigate.global_position = Vector2(3000.0, 0.0)
+	battle._update_sensor_picture()
+	if awacs.datalink_emission_mode != TacticalUnit.DatalinkEmissionMode.SILENT:
+		failures.append("l'AWACS continue d'émettre sans bâtiment relié")
+	if emitter_hunter.destroyed:
+		failures.append("la cible de veille électromagnétique a été détruite pendant le test")
+	battle.free()
+
+
+func _test_passive_triangulation(failures: Array[String]) -> void:
+	var battle = BATTLE_SCENE.instantiate()
+	battle.benchmark_empty_scenario = true
+	root.add_child(battle)
+	battle.set_process(false)
+	battle.set_physics_process(false)
+	var profile: UnitProfile = load("res://data/balance/default_unit.tres").duplicate(true)
+	profile.weapon_system_profiles = []
+	profile.missile_capacity = 0
+	profile.missile_launcher_count = 0
+	var first: TacticalUnit = battle._spawn_unit("CAPTEUR-A", 0, Vector2(-200.0, -100.0), profile)
+	var second: TacticalUnit = battle._spawn_unit("CAPTEUR-B", 0, Vector2(-200.0, 100.0), profile)
+	var target: TacticalUnit = battle._spawn_unit("SOURCE", 1, Vector2(100.0, 0.0), profile)
+	first.sensor_mode = TacticalUnit.SensorMode.PASSIVE
+	second.sensor_mode = TacticalUnit.SensorMode.PASSIVE
+	battle._update_sensor_picture()
+	var track = battle._get_sensor_track(0, target)
+	if track == null or track.get_state() != SENSOR_TRACK_SCRIPT.State.TRACKED:
+		failures.append("deux relèvements passifs séparés ne construisent pas une piste")
+	elif track.bearing_observer_count < 2 or not bool(track.last_observation_channels & SENSOR_TRACK_SCRIPT.Channel.TRIANGULATED):
+		failures.append("la piste fusionnée n'enregistre pas sa triangulation")
+	elif track.triangulation_quality <= 0.08:
+		failures.append("la géométrie des capteurs ne réduit pas l'incertitude")
+	second.global_position = Vector2(-3000.0, 100.0)
+	battle._update_sensor_picture()
+	if track.bearing_observer_count != 1:
+		failures.append("un capteur sorti de portée compte encore dans la triangulation")
 	battle.free()

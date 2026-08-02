@@ -8,6 +8,13 @@ enum State {
 	IDENTIFIED,
 }
 
+enum Channel {
+	THERMAL = 1,
+	RADIO = 2,
+	ACTIVE_RADAR = 4,
+	TRIANGULATED = 8,
+}
+
 const SIGNAL_CONFIDENCE: float = 0.30
 const TRACKED_CONFIDENCE: float = 0.72
 const IDENTIFIED_CONFIDENCE: float = 1.0
@@ -28,6 +35,9 @@ var seconds_since_any_observation: float = INF
 var seconds_since_kinematic_observation: float = INF
 var assumed_target_acceleration: float = 20.0
 var classification_locked: bool = false
+var last_observation_channels: int = 0
+var bearing_observer_count: int = 0
+var triangulation_quality: float = 0.0
 
 
 func _init(new_observer_team_id: int, new_target: Node2D, target_acceleration: float) -> void:
@@ -45,12 +55,18 @@ func observe(
 	observed_state: State,
 	observed_position: Vector2,
 	observed_velocity: Vector2,
-	base_uncertainty: float
+	base_uncertainty: float,
+	observation_channels: int = 0,
+	observer_count: int = 1,
+	new_triangulation_quality: float = 0.0
 ) -> void:
 	var observation_confidence: float = _confidence_for_state(observed_state)
 	observation_floor = maxf(observation_floor, observation_confidence)
 	confidence = maxf(confidence, observation_confidence)
 	seconds_since_any_observation = 0.0
+	last_observation_channels = observation_channels
+	bearing_observer_count = maxi(1, observer_count)
+	triangulation_quality = clampf(new_triangulation_quality, 0.0, 1.0)
 	if observed_state >= State.TRACKED:
 		estimated_position = observed_position
 		estimated_velocity = observed_velocity
