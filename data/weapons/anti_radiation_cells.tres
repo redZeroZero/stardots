@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponSystemProfile" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/config/weapon_system_profile.gd" id="1_system"]
+[ext_resource type="Resource" path="res://data/weapon_mounts/omnidirectional_vls.tres" id="2_mount"]
+[ext_resource type="Resource" path="res://data/munitions/anti_radiation_missile.tres" id="3_missile"]
+
+[resource]
+script = ExtResource("1_system")
+display_name = "Cellules antirayonnement"
+family = 2
+tactical_role = 4
+mount_profile = ExtResource("2_mount")
+feed_type = 1
+launcher_count = 4
+loader_count = 0
+ammunition_capacity = 4
+reload_time = 0.0
+minimum_range = 180.0
+maximum_range = 1700.0
+fire_interval = 0.35
+heat_per_shot = 9.0
+missile_profile = ExtResource("3_missile")

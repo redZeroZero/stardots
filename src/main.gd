@@ -18,6 +18,7 @@ const LASER_PDC_SYSTEM: WeaponSystemProfile = preload("res://data/weapons/laser_
 const SHORT_INTERCEPTOR_SYSTEM: WeaponSystemProfile = preload("res://data/weapons/short_interceptor_launcher.tres")
 const MEDIUM_MISSILE_SYSTEM: WeaponSystemProfile = preload("res://data/weapons/medium_missile_tubes.tres")
 const LONG_MISSILE_SYSTEM: WeaponSystemProfile = preload("res://data/weapons/long_range_missile_cells.tres")
+const ANTI_RADIATION_SYSTEM: WeaponSystemProfile = preload("res://data/weapons/anti_radiation_cells.tres")
 const RAILGUN_SYSTEM: WeaponSystemProfile = preload("res://data/weapons/medium_railgun.tres")
 const DEFAULT_TACTICAL_PILOT_PROFILE := preload("res://data/ai/default_tactical_pilot.tres")
 const MATCH_RULES: MatchRules = preload("res://data/balance/match_rules.tres")
@@ -45,6 +46,7 @@ enum OffensiveWeaponSelection {
 	AUTO,
 	MISSILES,
 	RAILGUN,
+	ANTI_RADIATION,
 }
 
 enum FireDoctrine {
@@ -89,6 +91,7 @@ var propulsion_demo: bool = OS.get_cmdline_user_args().has("--propulsion-demo")
 var weapons_demo: bool = OS.get_cmdline_user_args().has("--weapons-demo")
 var ai_demo: bool = OS.get_cmdline_user_args().has("--ai-demo")
 var sensor_demo: bool = OS.get_cmdline_user_args().has("--sensor-demo")
+var radiation_demo: bool = OS.get_cmdline_user_args().has("--radiation-demo")
 var benchmark_empty_scenario: bool = false
 var target_camera_zoom: float = 0.42
 var zoom_anchor_world: Vector2 = Vector2.ZERO
@@ -133,7 +136,7 @@ func _ready() -> void:
 	tactical_overlay.bind(self)
 	tactical_labels.bind(self)
 	_spawn_demo_units()
-	if propulsion_demo or weapons_demo or sensor_demo:
+	if propulsion_demo or weapons_demo or sensor_demo or radiation_demo:
 		for unit: TacticalUnitScene in friendly_units:
 			selected_units.append(unit)
 			unit.set_selected(true)
@@ -141,12 +144,16 @@ func _ready() -> void:
 			tactical_camera.position = Vector2(250.0, 360.0)
 			tactical_camera.zoom = Vector2.ONE * 0.50
 			target_camera_zoom = 0.50
+		elif radiation_demo:
+			_frame_units(friendly_units + enemy_units)
 		else:
 			_frame_friendly_units()
 	_apply_visual_zoom()
 	if ai_demo:
 		_frame_units(friendly_units + enemy_units)
-	if weapons_demo:
+	if radiation_demo:
+		objective_label.text = "SCÉNARIO: CHASSE AUX ÉMETTEURS — ARME ANTIRAD, A PUIS CLIC"
+	elif weapons_demo:
 		objective_label.text = "SCÉNARIO: ARMEMENTS ET ARCS — A PUIS CLIC SUR UNE CIBLE"
 	elif ai_demo:
 		objective_label.text = "SCÉNARIO: PILOTE TACTIQUE IA — PORTÉE, CAP ET ARCS"
@@ -226,6 +233,8 @@ func _update_fire_control_buttons() -> void:
 		weapon_name = "MISSILES"
 	elif offensive_weapon_selection == OffensiveWeaponSelection.RAILGUN:
 		weapon_name = "RAILGUN"
+	elif offensive_weapon_selection == OffensiveWeaponSelection.ANTI_RADIATION:
+		weapon_name = "ANTIRAD"
 	var doctrine_name := "ÉCONOMIE"
 	if fire_doctrine == FireDoctrine.SALVO:
 		doctrine_name = "SALVE"
@@ -463,6 +472,8 @@ func _spawn_demo_units() -> void:
 		return
 	if weapons_demo:
 		_spawn_weapons_demo_units()
+	elif radiation_demo:
+		_spawn_radiation_demo_units()
 	elif ai_demo:
 		_spawn_ai_demo_units()
 	elif sensor_demo:
@@ -599,6 +610,41 @@ func _spawn_weapons_demo_units() -> void:
 	incoming.finished.connect(_on_missile_finished)
 	incoming.launch(Vector2(-480.0, 120.0), friendly_units[0], 1, MISSILE_PROFILE)
 	incoming.set_visual_zoom(tactical_camera.zoom.x)
+
+
+func _spawn_radiation_demo_units() -> void:
+	var hunter_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
+	hunter_profile.display_name = "Frégate de suppression électronique"
+	hunter_profile.tactical_role = "CHASSEUR D'ÉMETTEURS"
+	hunter_profile.weapon_system_profiles = [KINETIC_PDC_SYSTEM, ANTI_RADIATION_SYSTEM]
+	hunter_profile.active_emission_detection_range = 2200.0
+	hunter_profile.missile_capacity = 0
+	hunter_profile.missile_launcher_count = 0
+	var hunter: TacticalUnitScene = _spawn_unit(
+		"ARM-01",
+		0,
+		Vector2(-700.0, 360.0),
+		hunter_profile
+	)
+	hunter.rotation = PI * 0.5
+	hunter.sensor_mode = TacticalUnitScene.SensorMode.PASSIVE
+
+	var emitter_profile: UnitProfile = AWACS_PROFILE.duplicate(true)
+	emitter_profile.display_name = "Émetteur de calibration"
+	emitter_profile.tactical_role = "RADAR ACTIF"
+	emitter_profile.weapon_system_profiles = []
+	emitter_profile.point_defense_ammunition_capacity = 0
+	emitter_profile.missile_capacity = 0
+	emitter_profile.missile_launcher_count = 0
+	var emitter: TacticalUnitScene = _spawn_unit(
+		"EYE-CIBLE",
+		1,
+		Vector2(700.0, 360.0),
+		emitter_profile
+	)
+	emitter.sensor_mode = TacticalUnitScene.SensorMode.ACTIVE
+	emitter.fixed_in_place = true
+	emitter.invulnerable = true
 
 
 func _spawn_ai_demo_units() -> void:
@@ -1269,8 +1315,18 @@ func _fire_selected_offensive_weapons(
 	targets: Array[TacticalUnitScene],
 	missile_allocation: Dictionary
 ) -> int:
-	var allow_missiles: bool = offensive_weapon_selection != OffensiveWeaponSelection.RAILGUN
-	var allow_railgun: bool = offensive_weapon_selection != OffensiveWeaponSelection.MISSILES
+	var allow_missiles: bool = offensive_weapon_selection in [
+		OffensiveWeaponSelection.AUTO,
+		OffensiveWeaponSelection.MISSILES,
+	]
+	var allow_railgun: bool = offensive_weapon_selection in [
+		OffensiveWeaponSelection.AUTO,
+		OffensiveWeaponSelection.RAILGUN,
+	]
+	var allow_anti_radiation: bool = offensive_weapon_selection in [
+		OffensiveWeaponSelection.AUTO,
+		OffensiveWeaponSelection.ANTI_RADIATION,
+	]
 	var saturation: bool = fire_doctrine == FireDoctrine.SATURATION
 	var shots: int = 0
 	if saturation:
@@ -1279,6 +1335,8 @@ func _fire_selected_offensive_weapons(
 				if _fire_railgun(launcher, target):
 					shots += 1
 					break
+		if allow_anti_radiation:
+			shots += _launch_anti_radiation_salvo(launcher, targets, true, missile_allocation)
 		if allow_missiles:
 			shots += _launch_missile_salvo(launcher, targets, true, missile_allocation)
 		return shots
@@ -1287,6 +1345,15 @@ func _fire_selected_offensive_weapons(
 		for target: TacticalUnitScene in targets:
 			if _fire_railgun(launcher, target):
 				return 1
+	if allow_anti_radiation:
+		var radiation_shots: int = _launch_anti_radiation_salvo(
+			launcher,
+			targets,
+			false,
+			missile_allocation
+		)
+		if radiation_shots > 0:
+			return radiation_shots
 	if allow_missiles:
 		return _launch_missile_salvo(launcher, targets, false, missile_allocation)
 	return 0
@@ -1296,18 +1363,34 @@ func _get_attack_block_reason(target: TacticalUnitScene) -> String:
 	var found_weapon: bool = false
 	var found_in_range: bool = false
 	var found_in_arc: bool = false
+	var found_radio_bearing: bool = false
 	for launcher: TacticalUnitScene in selected_units:
 		for system: WeaponSystemProfile in launcher.weapon_system_profiles:
-			if offensive_weapon_selection == OffensiveWeaponSelection.MISSILES and system.family != WeaponSystemProfile.Family.MISSILE:
+			if (
+				offensive_weapon_selection == OffensiveWeaponSelection.MISSILES
+				and system.tactical_role != WeaponSystemProfile.TacticalRole.ANTI_SHIP
+			):
 				continue
 			if offensive_weapon_selection == OffensiveWeaponSelection.RAILGUN and system.family != WeaponSystemProfile.Family.RAILGUN:
 				continue
+			if offensive_weapon_selection == OffensiveWeaponSelection.ANTI_RADIATION and system.tactical_role != WeaponSystemProfile.TacticalRole.ANTI_RADIATION:
+				continue
 			if system.family != WeaponSystemProfile.Family.RAILGUN and not (
 				system.family == WeaponSystemProfile.Family.MISSILE
-				and system.tactical_role == WeaponSystemProfile.TacticalRole.ANTI_SHIP
+				and system.tactical_role in [
+					WeaponSystemProfile.TacticalRole.ANTI_SHIP,
+					WeaponSystemProfile.TacticalRole.ANTI_RADIATION,
+				]
 			):
 				continue
 			found_weapon = true
+			if (
+				system.tactical_role == WeaponSystemProfile.TacticalRole.ANTI_RADIATION
+				and not _has_current_radio_bearing(launcher.team_id, target)
+			):
+				continue
+			if system.tactical_role == WeaponSystemProfile.TacticalRole.ANTI_RADIATION:
+				found_radio_bearing = true
 			var distance: float = launcher.global_position.distance_to(target.global_position)
 			if not system.is_in_range(distance):
 				continue
@@ -1315,15 +1398,88 @@ func _get_attack_block_reason(target: TacticalUnitScene) -> String:
 			if not launcher.is_position_in_mount_arc(system.mount_profile, target.global_position):
 				continue
 			found_in_arc = true
-			if not _launcher_has_fire_control_solution(launcher, target):
+			if (
+				system.tactical_role != WeaponSystemProfile.TacticalRole.ANTI_RADIATION
+				and not _launcher_has_fire_control_solution(launcher, target)
+			):
 				return "TIR BLOQUÉ: PISTE OU LIAISON INSUFFISANTE"
 	if not found_weapon:
+		if offensive_weapon_selection == OffensiveWeaponSelection.ANTI_RADIATION:
+			return "TIR BLOQUÉ: AUCUNE ARME ANTIRAYONNEMENT"
 		return "TIR BLOQUÉ: AUCUNE ARME ANTINAVIRE"
+	if offensive_weapon_selection == OffensiveWeaponSelection.ANTI_RADIATION and not found_radio_bearing:
+		return "TIR BLOQUÉ: AUCUNE ÉMISSION RADIO RÉCENTE"
 	if not found_in_range:
 		return "TIR BLOQUÉ: HORS PORTÉE OU DISTANCE MINIMALE"
 	if not found_in_arc:
 		return "TIR BLOQUÉ: CIBLE HORS ARC"
 	return "TIR BLOQUÉ: RECHARGE, MUNITIONS OU SURCHAUFFE"
+
+
+func _launch_anti_radiation_salvo(
+	launcher: TacticalUnitScene,
+	targets: Array[TacticalUnitScene],
+	saturation: bool,
+	allocation: Dictionary
+) -> int:
+	var system: WeaponSystemProfile = launcher.get_weapon_system(
+		WeaponSystemProfile.Family.MISSILE,
+		WeaponSystemProfile.TacticalRole.ANTI_RADIATION
+	)
+	if system == null or system.missile_profile == null:
+		return 0
+	var eligible_targets: Array[TacticalUnitScene] = []
+	var start_index: int = int(allocation.get("radiation_cursor", 0))
+	for offset: int in targets.size():
+		var target: TacticalUnitScene = targets[(start_index + offset) % targets.size()]
+		var target_position: Vector2 = _get_contact_position(launcher.team_id, target)
+		if target.destroyed or not _has_current_radio_bearing(launcher.team_id, target):
+			continue
+		if not launcher.can_fire_weapon_system(system, target_position):
+			continue
+		eligible_targets.append(target)
+	if eligible_targets.is_empty():
+		return 0
+	var requested_count: int = system.launcher_count if saturation else 1
+	var first_target_position: Vector2 = _get_contact_position(launcher.team_id, eligible_targets[0])
+	var launched_count: int = launcher.consume_weapon_system_salvo(
+		system,
+		first_target_position,
+		requested_count
+	)
+	for launch_index: int in launched_count:
+		var assigned_target: TacticalUnitScene = eligible_targets[launch_index % eligible_targets.size()]
+		var assigned_position: Vector2 = _get_contact_position(launcher.team_id, assigned_target)
+		var lane_slot: float = float(launch_index) - float(launched_count - 1) * 0.5
+		var lane_direction: Vector2 = launcher.global_position.direction_to(assigned_position).rotated(PI * 0.5)
+		var missile := TacticalMissileScene.new() as TacticalMissileScene
+		missiles_layer.add_child(missile)
+		missile.impacted.connect(_on_missile_impacted.bind(launcher.team_id))
+		missile.detonated.connect(_on_missile_detonated)
+		missile.finished.connect(_on_missile_finished)
+		missile.launch(
+			launcher.global_position + lane_direction * lane_slot * 3.0,
+			assigned_target,
+			launcher.team_id,
+			system.missile_profile,
+			assigned_position
+		)
+		missile.set_cruise_lane_offset(lane_direction * lane_slot * MISSILE_SWARM_SPACING)
+		missile.set_visual_zoom(tactical_camera.zoom.x)
+	allocation["radiation_cursor"] = start_index + launched_count
+	missiles_launched[launcher.team_id] += launched_count
+	_update_status()
+	return launched_count
+
+
+func _has_current_radio_bearing(observer_team_id: int, target: TacticalUnitScene) -> bool:
+	var track = _get_sensor_track(observer_team_id, target)
+	return (
+		track != null
+		and track.get_state() >= SensorTrackLogic.State.SIGNAL
+		and track.seconds_since_any_observation <= SENSOR_UPDATE_INTERVAL * 2.0
+		and bool(track.last_observation_channels & SensorTrackLogic.Channel.RADIO)
+	)
 
 
 func _fire_railgun(launcher: TacticalUnitScene, target: TacticalUnitScene) -> bool:
@@ -1568,6 +1724,10 @@ func _update_missile_guidance() -> void:
 			continue
 		if missile.target is TacticalUnit:
 			missile.target.trigger_combat_thermal_mode()
+			if missile.is_anti_radiation():
+				# L'autodirecteur passif ne reçoit pas la position réelle via le réseau :
+				# il poursuit l'émission ou continue vers son dernier relèvement.
+				continue
 			var guidance_track = _get_sensor_track(missile.team_id, missile.target)
 			var guidance_available: bool = _team_has_track(missile.team_id, missile.target)
 			var guidance_position: Vector2 = (

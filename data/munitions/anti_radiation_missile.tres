@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="MissileProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/missile_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+display_name = "Missile antirayonnement longue portée"
+seeker_mode = 1
+launch_speed = 40.0
+cruise_speed = 155.0
+cruise_acceleration = 48.0
+cruise_turn_rate_degrees = 48.0
+terminal_seeker_range = 220.0
+terminal_speed = 285.0
+terminal_acceleration = 170.0
+terminal_turn_rate_degrees = 135.0
+maximum_lifetime = 18.0
+radiation_seeker_range = 1900.0
+minimum_radiation_signature = 0.18
+warhead_arming_distance = 90.0
+proximity_fuze_range = 30.0
+fragment_radius = 78.0
+maximum_damage = 95.0
+maximum_integrity = 38.0
+intercepted_fragment_radius = 34.0
+intercepted_maximum_damage = 18.0
+explosion_duration = 0.34

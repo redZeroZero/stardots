@@ -21,6 +21,7 @@ var external_guidance_available: bool = true
 var visual_zoom: float = 1.0
 var cruise_lane_offset: Vector2 = Vector2.ZERO
 var distance_travelled: float = 0.0
+var radiation_source_available: bool = false
 
 
 func launch(
@@ -43,6 +44,7 @@ func launch(
 		else target.global_position
 	)
 	distance_travelled = 0.0
+	_refresh_radiation_lock()
 	var launch_direction: Vector2 = global_position.direction_to(last_known_position)
 	velocity = launch_direction * profile.launch_speed
 	rotation = launch_direction.angle() + PI * 0.5
@@ -67,18 +69,35 @@ func _physics_process(delta: float) -> void:
 		_finish_without_impact()
 		return
 
-	var target_is_valid := is_instance_valid(target)
-	if target_is_valid and external_guidance_available:
+	var target_is_valid: bool = is_instance_valid(target)
+	if is_anti_radiation():
+		_refresh_radiation_lock()
+		guidance_lost = not radiation_source_available
+	elif target_is_valid and external_guidance_available:
 		guidance_lost = false
 	else:
 		guidance_lost = true
 
-	var distance_to_target: float = global_position.distance_to(target.global_position) if target_is_valid else global_position.distance_to(last_known_position)
-	terminal_guidance = (
+	var target_navigation_available: bool = (
 		target_is_valid
+		and (radiation_source_available if is_anti_radiation() else true)
+	)
+	var distance_to_target: float = (
+		global_position.distance_to(target.global_position)
+		if target_navigation_available
+		else global_position.distance_to(last_known_position)
+	)
+	terminal_guidance = (
+		target_navigation_available
 		and distance_to_target <= profile.terminal_seeker_range + cruise_lane_offset.length()
 	)
-	var aim_point: Vector2 = target.global_position if terminal_guidance else last_known_position + cruise_lane_offset
+	var aim_point: Vector2 = last_known_position
+	if terminal_guidance:
+		aim_point = target.global_position
+	elif is_anti_radiation() and radiation_source_available:
+		aim_point = target.global_position + cruise_lane_offset
+	elif not guidance_lost:
+		aim_point += cruise_lane_offset
 	var desired_direction := global_position.direction_to(aim_point)
 	var current_direction := velocity.normalized() if velocity.length() > 0.01 else desired_direction
 	var turn_rate_degrees: float = profile.terminal_turn_rate_degrees if terminal_guidance else profile.cruise_turn_rate_degrees
@@ -110,6 +129,14 @@ func is_interceptable() -> bool:
 	return not exploding and integrity > 0.0
 
 
+func is_anti_radiation() -> bool:
+	return profile != null and profile.seeker_mode == MissileProfile.SeekerMode.ANTI_RADIATION
+
+
+func has_radiation_lock() -> bool:
+	return is_anti_radiation() and radiation_source_available
+
+
 func is_warhead_armed() -> bool:
 	return distance_travelled >= profile.warhead_arming_distance
 
@@ -129,6 +156,22 @@ func set_visual_zoom(value: float) -> void:
 		return
 	visual_zoom = clamped_value
 	queue_redraw()
+
+
+func _refresh_radiation_lock() -> void:
+	radiation_source_available = false
+	if not is_anti_radiation() or not is_instance_valid(target):
+		return
+	if not target.has_method("get_electromagnetic_signature"):
+		return
+	var electromagnetic_signature: float = float(target.get_electromagnetic_signature())
+	if electromagnetic_signature < profile.minimum_radiation_signature:
+		return
+	var effective_range: float = profile.radiation_seeker_range * sqrt(electromagnetic_signature)
+	if global_position.distance_squared_to(target.global_position) > effective_range * effective_range:
+		return
+	radiation_source_available = true
+	last_known_position = target.global_position
 
 
 func apply_point_defense_damage(amount: float) -> void:
@@ -168,6 +211,9 @@ func _draw() -> void:
 
 	var guided_color := Color("64ddff") if team_id == 0 else Color("ff5d6c")
 	var terminal_color := Color("b9ff66") if team_id == 0 else Color("ff9d4d")
+	if is_anti_radiation():
+		guided_color = Color("e66cff") if team_id == 0 else Color("ff4fbd")
+		terminal_color = Color("fff06a")
 	var missile_color := Color("ffbd48") if guidance_lost else guided_color
 	if terminal_guidance:
 		missile_color = terminal_color

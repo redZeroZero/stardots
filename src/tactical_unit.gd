@@ -595,6 +595,27 @@ func mark_weapon_system_fired(system: WeaponSystemProfile, aim_point: Vector2) -
 	queue_redraw()
 
 
+func consume_weapon_system_salvo(
+	system: WeaponSystemProfile,
+	aim_point: Vector2,
+	requested_count: int
+) -> int:
+	if not can_fire_weapon_system(system, aim_point):
+		return 0
+	var available: int = get_weapon_system_ammunition(system)
+	var consumed: int = mini(maxi(0, requested_count), mini(system.launcher_count, available))
+	if consumed <= 0:
+		return 0
+	weapon_system_ammunition[system] = available - consumed
+	weapon_system_cooldowns[system] = maxf(0.0, system.fire_interval)
+	trigger_combat_thermal_mode()
+	_add_heat(system.heat_per_shot * float(consumed))
+	defense_target_position = aim_point
+	defense_fire_remaining = 0.10
+	queue_redraw()
+	return consumed
+
+
 func get_weapon_system_ammunition(system: WeaponSystemProfile) -> int:
 	return int(weapon_system_ammunition.get(system, 0))
 

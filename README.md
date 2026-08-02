@@ -52,7 +52,7 @@ fixes et indestructibles. Les unités sont sélectionnées au départ ; `A`, pui
 un clic sur une cible, ordonne une salve. Les secteurs colorés tournent avec la
 coque.
 
-`W` sélectionne l'armement offensif (`AUTO`, `MISSILES`, `RAILGUN`). `D` change
+`W` sélectionne l'armement offensif (`AUTO`, `MISSILES`, `RAILGUN`, `ANTIRAD`). `D` change
 la doctrine : `ÉCONOMIE` limite l'ordre à un seul tireur, `SALVE` autorise un
 tir par bâtiment et `SATURATION` vide tous les tubes et cellules prêts. Les
 tourelles doivent atteindre leur cap de pointage avant de tirer.
@@ -86,6 +86,17 @@ Dans `--ai-demo`, sélectionnez `EYE-BLEU` pour suivre son émission automatique
 silence radio, partage de pistes, puis conduite de tir selon les contacts et les
 alliés reliés. Le bandeau renseignement compte aussi les pistes obtenues par
 triangulation (`TRI`) et par détection d'une émission (`EM`).
+
+Pour tester la chasse aux émetteurs :
+
+```bash
+./scripts/godot --path . -- --radiation-demo
+```
+
+`ARM-01` détecte passivement le radar fixe et indestructible `EYE-CIBLE`.
+L'unité est sélectionnée au départ : en `AUTO` ou `ANTIRAD`, pressez `A` puis
+cliquez sur la cible. Le missile magenta poursuit l'émission ; si elle disparaît,
+il continue vers son dernier relèvement sans recevoir la position réelle.
 
 Pour exécuter les tests de charge principaux :
 

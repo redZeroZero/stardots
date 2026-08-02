@@ -19,6 +19,7 @@ enum TacticalRole {
 	INTERCEPTOR,
 	ANTI_SHIP,
 	KINETIC_STRIKE,
+	ANTI_RADIATION,
 }
 
 @export_category("Identité")

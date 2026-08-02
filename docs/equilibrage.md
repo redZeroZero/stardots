@@ -287,16 +287,18 @@ la coque et bloquent réellement un tir hors secteur ; la distance minimale est
 également appliquée. L'interface dessine chaque secteur et indique si un ordre
 échoue faute d'arc, de portée, de piste ou de disponibilité.
 
-Le catalogue initial contient sept `WeaponSystemProfile` : PDC cinétique
+Le catalogue initial contient huit `WeaponSystemProfile` : PDC cinétique
 fragmentant, PDC laser, missile intercepteur court, tubes antinavires moyens,
-cellules antinavires fixes, cellules longue portée et railgun axial moyen. Les
+cellules antinavires fixes, cellules longue portée, cellules antirayonnement et
+railgun axial moyen. Les
 tubes utilisent un magasin ; les cellules offrent une forte cadence initiale,
 mais chaque départ consomme définitivement une cellule. Le laser consomme de la
 chaleur plutôt que des munitions. Les défenses attaquent automatiquement les
 menaces entrantes ; railgun et missiles antinavires répondent à l'ordre de zone.
 
 La sélection offensive utilise `W` pour autoriser automatiquement toutes les
-armes, uniquement les missiles ou uniquement les railguns. La doctrine utilise
+armes, uniquement les missiles antinavires, uniquement les railguns ou
+uniquement les missiles antirayonnement. La doctrine utilise
 `D` : `ÉCONOMIE` arrête l'ordre après le premier tir de la formation, `SALVE`
 autorise un tir par bâtiment, et `SATURATION` déclenche toutes les armes et
 cellules prêtes. Une batterie fixe suit toujours la coque. Une tourelle conserve
@@ -310,6 +312,14 @@ les missiles à tour de rôle entre toutes les cibles valides de la zone. Les
 couloirs convergent au passage en guidage terminal. La fusée de proximité reste
 désarmée pendant les `55` premières unités de vol, ce qui protège le lanceur et
 la formation au départ de la salve.
+
+Le missile antirayonnement exige un relèvement radio récent plutôt qu'une
+solution de tir conventionnelle. Son autodirecteur passif acquiert une source
+selon sa puissance et sa portée de réception, puis met à jour sa route tant que
+l'émission persiste. Une extinction lui retire l'accès à la position réelle :
+il poursuit vers le dernier relèvement et peut reprendre la cible si elle
+recommence à émettre. `--radiation-demo` fournit un chasseur `ARM-01` et un radar
+fixe, actif et indestructible pour vérifier ce comportement.
 
 ## Pilote tactique adverse
 

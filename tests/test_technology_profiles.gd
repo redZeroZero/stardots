@@ -20,6 +20,7 @@ const WEAPON_PATHS: Array[String] = [
 	"res://data/weapons/medium_missile_tubes.tres",
 	"res://data/weapons/medium_missile_cells.tres",
 	"res://data/weapons/long_range_missile_cells.tres",
+	"res://data/weapons/anti_radiation_cells.tres",
 	"res://data/weapons/medium_railgun.tres",
 ]
 
@@ -69,5 +70,5 @@ func _run() -> void:
 			push_error(failure)
 		quit(1)
 		return
-	print("Profils technologiques validés : 4 propulsions, 5 montages et 7 systèmes d'arme.")
+	print("Profils technologiques validés : 4 propulsions, 5 montages et 8 systèmes d'arme.")
 	quit(0)
