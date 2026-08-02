@@ -290,8 +290,8 @@ la coque et bloquent réellement un tir hors secteur ; la distance minimale est
 Le catalogue initial contient huit `WeaponSystemProfile` : PDC cinétique
 fragmentant, PDC laser, missile intercepteur court, tubes antinavires moyens,
 cellules antinavires fixes, cellules longue portée, cellules antirayonnement et
-railgun axial moyen. Les
-tubes utilisent un magasin ; les cellules offrent une forte cadence initiale,
+railgun axial moyen. Les tubes utilisent un magasin ; les cellules offrent une
+forte cadence initiale,
 mais chaque départ consomme définitivement une cellule. Le laser consomme de la
 chaleur plutôt que des munitions. Les défenses attaquent automatiquement les
 menaces entrantes ; railgun et missiles antinavires répondent à l'ordre de zone.

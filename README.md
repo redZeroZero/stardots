@@ -52,10 +52,10 @@ fixes et indestructibles. Les unités sont sélectionnées au départ ; `A`, pui
 un clic sur une cible, ordonne une salve. Les secteurs colorés tournent avec la
 coque.
 
-`W` sélectionne l'armement offensif (`AUTO`, `MISSILES`, `RAILGUN`, `ANTIRAD`). `D` change
-la doctrine : `ÉCONOMIE` limite l'ordre à un seul tireur, `SALVE` autorise un
-tir par bâtiment et `SATURATION` vide tous les tubes et cellules prêts. Les
-tourelles doivent atteindre leur cap de pointage avant de tirer.
+`W` sélectionne l'armement offensif (`AUTO`, `MISSILES`, `RAILGUN`, `ANTIRAD`).
+`D` change la doctrine : `ÉCONOMIE` limite l'ordre à un seul tireur, `SALVE`
+autorise un tir par bâtiment et `SATURATION` vide tous les tubes et cellules
+prêts. Les tourelles doivent atteindre leur cap de pointage avant de tirer.
 
 Pour observer le pilote tactique adverse face à une force bleue contrôlable et
 indestructible :
