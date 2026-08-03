@@ -104,7 +104,8 @@ les deux axes pour un déplacement diagonal. La vitesse reste adaptée au niveau
 de zoom et les flèches du clavier restent disponibles.
 
 Sans unité sélectionnée, maintenir le clic droit et glisser déplace directement
-la carte ; le déplacement est compensé par le niveau de zoom. Sur la minimap,
+la carte. Avec une sélection, maintenir `Ctrl` pendant le même geste force ce
+déplacement sans créer d'ordre. Le déplacement est compensé par le niveau de zoom. Sur la minimap,
 le glisser continu fonctionne avec le bouton gauche ou droit. Les contrôles de
 l'interface neutralisent le défilement par contact avec le bord afin d'éviter
 que les deux gestes se cumulent.
@@ -152,13 +153,21 @@ d'armement de la sélection sont également reportés sur la minimap.
 
 Le clic droit est réservé à la navigation et ne déclenche plus jamais un tir.
 La touche `A` arme un ordre d'attaque, puis le clic gauche place une zone de tir
-de `180` unités. Chaque lanceur sélectionné tire une salve sur le contact valide
-le plus proche du centre, s'il possède à la fois une solution de tir et la
-portée nécessaire. Une zone vide ou un clic imprécis ne crée aucun mouvement.
-Le cercle devient vert si au moins un missile est parti, orange sinon. `Échap`
-annule l'ordre armé. Le changement de mode capteur utilise désormais `S`.
+de `180` unités. Cette mission reste mémorisée tant qu'aucune cible ne satisfait
+ses conditions. Elle capture les unités affectées, l'arme `W` et la doctrine
+`D`, puis les réévalue à chaque passe capteur. Le premier engagement valide
+consomme la mission après avoir appliqué la doctrine ; aucun mouvement ou
+retournement automatique n'est créé.
 
-L'ordre fonctionne sur une sélection multiple : chaque bâtiment armé tire au
+Le cercle reste cyan sans contact, devient orange lorsqu'un contact est présent
+mais attend une piste, une liaison, une portée, un arc, un pointage, des
+munitions ou un refroidissement, puis pulse en vert après le tir. Son libellé
+indique le blocage. Un nouvel ordre remplace la mission des seules unités
+sélectionnées, ce qui permet à plusieurs groupes de conserver des zones
+distinctes. `Échap` annule le placement en cours ou, hors placement, les missions
+de la sélection. Le changement de mode capteur utilise `S`.
+
+Lors de son exécution, l'ordre fonctionne sur une sélection multiple : chaque bâtiment armé tire au
 plus un missile sur le meilleur contact de la zone, tandis que les bâtiments non
 armés restent dans le groupe sans générer de tir. Les ordres de déplacement
 répartissent une sélection de trois unités en triangle centré autour du point
@@ -180,7 +189,7 @@ profil autonome utilise uniquement la limite mécanique de sa propulsion.
 
 - clic droit : remplace la route, rejoint le point, freine et reprend le cap d'approche ;
 - Maj + clic droit : ajoute un waypoint, les points intermédiaires étant traversés sans arrêt ;
-- Ctrl + clic droit : traverse le point sans annuler la vélocité ;
+- Alt + clic droit : traverse le point sans annuler la vélocité ;
 - clic droit puis glisser : l'origine du geste fixe la destination et la flèche fixe le cap final.
 
 Une route sélectionnée est dessinée en cyan. Les waypoints verts sont traversés
@@ -232,7 +241,7 @@ que lorsqu'une route ou un segment change.
 Le benchmark headless de navigation sur 400 ticks mesure environ `0,44 ms` par
 tick pour 100 unités, `1,30 ms` pour 250 et `2,92 ms` pour 500 sur la machine de
 développement. Après branchement du pilote tactique, le benchmark de bataille
-complète mesure environ `45 ms` par tick pour 500 unités et 50 missiles,
+complète mesure environ `42,4 ms` par tick pour 500 unités et 50 missiles,
 capteurs, IA et PDC inclus. Les missiles sont indexés spatialement pour la
 défense proche et la signature thermique d'une cible n'est calculée qu'une fois
 par passe capteur.
@@ -271,6 +280,48 @@ piste, avec une incertitude qui diminue lorsque la géométrie s'améliore. Le
 bandeau résume ces origines par `TRI` et `EM`, sans ajouter de nouveaux anneaux ;
 la fiche d'une unité sélectionnée affiche son niveau et son régime d'émission.
 
+La frégate généraliste utilise désormais une veille passive de `700`, un radar
+actif de `1000` et une détection d'émissions de `1400`. Avec les seuils actuels,
+son radar produit une piste jusqu'à `680` et une identification jusqu'à `360` :
+elle peut donc opérer seule à portée réduite sans exploiter automatiquement les
+`900` unités de ses missiles moyens. Sa liaison standard est un transceiver de
+`1200` sans capacité de relais ni conduite de tir dédiée. Deux frégates reliées
+peuvent partager la piste précise produite par l'une d'elles, mais ne peuvent pas
+propager une piste reçue vers un troisième saut.
+
+Le porte-missiles longue portée constitue l'exception volontairement dépendante
+du réseau. Il conserve `420` en passif, `560` en actif, `720` contre les émissions
+et une liaison de réception seule. L'AWACS reste inchangé à `2800/4000/5000` et
+demeure nécessaire pour exploiter les engagements profonds et relayer la flotte.
+
+### Piste de conception — classification et illumination directionnelle
+
+Décision à prototyper lors de la prochaine session : séparer explicitement la
+qualité cinématique d'une piste de la connaissance du type de cible. Une
+détection passive devrait révéler rapidement le rôle ou la classe du contact,
+tout en conservant une position incertaine. Le joueur pourrait ainsi reconnaître
+un AWACS ou un arsenal sans disposer immédiatement d'une solution de tir.
+
+La visualisation envisagée conserve la silhouette ou un pictogramme de classe
+dès la détection, puis représente séparément la qualité de localisation : signal
+jaune diffus, piste orange stable et crochets verts pour la conduite de tir. Le
+radar actif ne serait donc plus l'unique clef d'identification ; il servirait à
+détecter les plateformes froides, réduire rapidement l'incertitude et produire
+une solution de tir au prix d'une émission repérable.
+
+Pour un bâtiment non spécialisé, le radar actif devrait probablement être
+directionnel. Son secteur suivrait l'orientation du bâtiment ou une direction
+d'illumination ordonnée, ce qui permettrait de rechercher et confirmer un
+contact inconnu sans éclairer tout l'espace autour de la formation. Un AWACS ou
+un bâtiment de veille dédié pourrait conserver une couverture omnidirectionnelle
+ou beaucoup plus large. Aucun angle, temps de balayage ou coût thermique n'est
+encore fixé.
+
+Afin d'éviter le micromanagement, cette capacité devrait être pilotée au niveau
+du groupe par une doctrine (`SILENCE`, `DISCRET`, `IDENTIFICATION`, `COMBAT`) ou
+par un ordre ponctuel « identifier ce contact ». Le groupe choisirait alors
+automatiquement le capteur, l'orientation et la durée d'émission appropriés.
+
 ## Systèmes d'armes et emplacements
 
 Un angle de `0°` regarde la proue, `-90°` bâbord, `90°` tribord et `180°` la
@@ -284,8 +335,30 @@ poupe. Cinq ressources de montage servent de choix initiaux :
 Chaque profil peut devenir `CUSTOM` en réglant son centre, sa largeur, son
 caractère fixe ou traversable et sa vitesse de rotation. Les arcs tournent avec
 la coque et bloquent réellement un tir hors secteur ; la distance minimale est
-également appliquée. L'interface dessine chaque secteur et indique si un ordre
-échoue faute d'arc, de portée, de piste ou de disponibilité.
+également appliquée. L'interface indique si un ordre échoue faute d'arc, de
+portée, de piste ou de disponibilité.
+
+### Enveloppe d'engagement agrégée
+
+En sélection multiple, chaque groupe partageant le même fournisseur de conduite
+de tir affiche deux contours : la veille nominale cyan et l'engagement orange.
+La veille réunit uniquement les capteurs capables de transmettre leurs propres
+observations au groupe. L'engagement exclut PDC et intercepteurs, puis suit le
+filtre `W` : toutes les armes offensives en `AUTO`, antinavires, railgun ou
+antirayonnement. Une perte de liaison sépare immédiatement les îlots.
+
+Une sélection unique restaure automatiquement le détail technique : capteur
+passif, radar actif, liaison, portée minimale, secteur de montage et cap de
+tourelle. `V` force ce diagnostic sur une sélection multiple. Au-delà de 32
+bâtiments dans un même groupe, l'affichage normal utilise une coque convexe
+simplifiée afin de borner le coût géométrique. Les munitions épuisées sont
+exclues de l'enveloppe ; un réticule vert n'apparaît sur une cible que si une
+vraie piste de qualité conduite de tir est accessible.
+
+Les surfaces utilisent les secteurs convexes d'origine, avec une opacité qui
+augmente dans les recouvrements. Seuls leurs contours booléens sont fusionnés :
+cela évite les erreurs de triangulation des unions concaves tout en laissant
+lire la redondance de couverture.
 
 Le catalogue initial contient huit `WeaponSystemProfile` : PDC cinétique
 fragmentant, PDC laser, missile intercepteur court, tubes antinavires moyens,
@@ -306,6 +379,10 @@ un cap relatif indépendant, poursuit son point de visée à la vitesse configur
 et ne tire qu'une fois dans sa tolérance angulaire. Sa direction instantanée est
 dessinée à l'intérieur de son enveloppe de rotation.
 
+Le projectile railgun reste visible jusque dans la vue stratégique : sa traînée
+conserve au moins `8 px` et sa tête `3,5 px` à l'écran. Le dézoom renforce
+légèrement son contraste sans modifier sa trajectoire ni sa collision.
+
 Une saturation n'empile plus les projectiles sur une trajectoire unique. Le
 calculateur attribue des couloirs latéraux espacés de `52` unités et distribue
 les missiles à tour de rôle entre toutes les cibles valides de la zone. Les
@@ -321,6 +398,52 @@ il poursuit vers le dernier relèvement et peut reprendre la cible si elle
 recommence à émettre. `--radiation-demo` fournit un chasseur `ARM-01` et un radar
 fixe, actif et indestructible pour vérifier ce comportement.
 
+## Réseau de données tactique
+
+Une plateforme physique reste une unité indépendamment de sa connectivité. Son
+`UnitProfile` peut référencer un `DataLinkProfile` optionnel qui décrit quatre
+capacités composables : recevoir, transmettre, relayer et fournir une conduite
+de tir. Sans profil, l'unité est isolée mais reste sélectionnable, mobile et
+armée ; elle n'exploite que ses propres observations.
+
+La frégate standard reçoit et transmet ses observations, sans les relayer.
+L'AWACS reçoit, émet,
+relaie sur plusieurs sauts et certifie les solutions de tir dans une portée de
+`1800` unités. Les liens sont directionnels : la portée appartient à l'émetteur
+et un transceiver sans capacité de relais ne propage pas un paquet reçu. Les
+armes et le pilote IA consultent le tableau de pistes de leur groupe tactique.
+La vue générale du joueur reste une synthèse de commandement, mais elle ne
+fournit plus implicitement une solution de tir à tous les bâtiments.
+
+Les groupes tactiques forment des domaines de fusion disjoints : deux capteurs
+de groupes différents ne triangulent donc pas directement leurs relèvements.
+Un profil de liaison doté de `can_bridge_groups` — actuellement l'AWACS — peut
+faire circuler des `TrackReport` synthétiques entre ces domaines. Le rapport
+conserve l'état, la position estimée, le vecteur et la provenance, avec une
+petite pénalité d'incertitude ; il ne transporte pas les observations brutes.
+
+Les missiles restent des munitions non sélectionnables, mais mémorisent le
+groupe de leur lanceur comme domaine de guidage. Ils ne peuvent plus exploiter
+une piste globale inaccessible à ce groupe.
+
+La passe capteur utilise maintenant la topologie locale avant le détail des
+plateformes. Elle compare d'abord les rectangles occupés par les groupes,
+élargis par leur plus grande portée effective. Seules les paires de groupes dont
+les régions peuvent se détecter descendent au niveau bâtiment contre bâtiment.
+Chaque observation est immédiatement ajoutée à un accumulateur `(groupe,
+cible)` qui ne conserve que les meilleurs rapports et la géométrie utile à la
+triangulation.
+
+Avec 500 bâtiments répartis en 20 groupes de 25, le benchmark mesure environ
+`59 ms` par passe capteur sans commandement et `99 ms` avec quatre AWACS, soit
+environ `15` et `25 ms` amortis par tick physique. Le cas artificiel où tous les
+groupes sont superposés reste un stress test coûteux, pas la topologie de
+référence du jeu.
+
+`--network-demo` aligne un émetteur, un AWACS relais, un récepteur et une
+plateforme isolée face à un contact fixe. La fiche de sélection affiche le rôle
+du nœud et le nombre de pistes réellement accessibles.
+
 ## Pilote tactique adverse
 
 Le planificateur de combat est indépendant du camp, mais seul l'adversaire
@@ -335,3 +458,46 @@ priorité railgun/missile, ratio de portée préférée, largeur de bande et seu
 saturation des cellules fixes. Le scénario `--ai-demo` oppose ce groupe à une
 frégate missile, un railgun et un AWACS bleus. Les bâtiments bleus sont mobiles,
 indestructibles, armés et exclusivement commandés par le joueur.
+
+### Scénario de bataille automatique
+
+`--fleet-battle-demo` active exceptionnellement le pilote pour les deux camps,
+avec deux profils distincts. `blue_network_missiles.tres` commande douze Bleus :
+un AWACS, quatre escorteurs mixtes, trois frégates, deux arsenaux longue portée
+et deux chasseurs antirayonnement. Ils maintiennent une bande de portée haute,
+priorisent les railguns et se replient sous 30 % de coque.
+
+`red_silent_raiders.tres` commande dix Rouges : un relais passif, trois
+railguns axiaux, deux frégates, deux escorteurs et deux chasseurs
+antirayonnement. Deux groupes cohérents réunissent chacun railgun, frégate,
+escorteur et chasseur sur un axe ; leurs espacements restent dans la bulle de
+défense rapprochée. Le troisième railgun attend la première diversion missile
+avant de quitter la réserve.
+
+Le relais n'allume pas son radar et commence par quatre secondes de silence. Il
+partage ensuite ses pistes pendant `24` ticks (`1,2 s`) toutes les `160` ticks
+(`8 s`). Le silence coupe effectivement l'accès distant aux pistes, au lieu de
+masquer uniquement l'icône d'émission. Les groupes donnent une forte priorité à
+la conduite de tir adverse et se replient sous 15 % de coque. Avant la première
+fenêtre, ils suivent des points d'approche préplanifiés : le plan de mission ne
+dépend pas d'une liaison permanente, contrairement à sa révision en vol.
+
+Le déploiement reçoit un bruit déterministe. La graine affichée peut être
+rejouée avec `--fleet-seed=<nombre>`. La partie se termine à l'annihilation, y
+compris par destruction mutuelle. Ce scénario sert à observer et mesurer les
+interactions, pas encore à valider l'équilibrage en points.
+
+### Réservation des salves et niveau d'automatisation
+
+L'IA estime les dégâts requis à partir de la coque connue, d'une marge doctrinale
+et de la défense rapprochée présente dans un rayon de `280` unités. Chaque
+missile en vol réserve ses dégâts attendus sur sa cible, pondérés par sa chance
+estimée de traverser PDC et intercepteurs. Les lanceurs suivants réduisent leur
+salve ou changent de cible lorsque cette réservation suffit. La doctrine bleue
+conserve 25 % de ses munitions et la rouge 15 %.
+
+La frontière visée pour le joueur est une commande par intention : cible ou
+zone, famille d'arme, économie/salve/saturation et réserve souhaitée. Le jeu
+assume l'allocation entre lanceurs, les missiles déjà engagés et la coordination
+temporelle. `SATURATION` reste un choix volontaire qui peut ignorer l'économie ;
+elle ne doit pas devenir un comportement automatique caché.

@@ -111,7 +111,7 @@ func _test_ai_demo(failures: Array[String]) -> void:
 		failures.append("la frégate bleue du scénario IA ne possède aucun missile")
 	if battle.friendly_units[1].get_weapon_system(WeaponSystemProfile.Family.RAILGUN) == null:
 		failures.append("le railgun bleu du scénario IA n'est pas armé")
-	if not battle.friendly_units[2].unit_profile.provides_fire_control:
+	if not battle.friendly_units[2].provides_fire_control_data():
 		failures.append("l'AWACS bleu ne fournit pas de conduite de tir")
 	var manual_target: Vector2 = battle.friendly_units[0].global_position + Vector2(120.0, 40.0)
 	battle.friendly_units[0].set_navigation_order(manual_target)

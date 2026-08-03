@@ -51,18 +51,21 @@ func _draw() -> void:
 	var station = tactical_root.get("objective_station")
 	if station != null:
 		draw_circle(_world_to_map(station.global_position), 3.0, Color("d3dbe8"))
+	_draw_engagement_envelopes()
+	_draw_fire_missions()
 
 	var friendly_units: Array = tactical_root.get("friendly_units")
 	for unit in friendly_units:
 		if not is_instance_valid(unit) or unit.destroyed or not unit.selected:
 			continue
 		var center := _world_to_map(unit.global_position)
-		draw_arc(center, _world_radius_to_map(unit.sensor_range), 0.0, TAU, 64, Color(0.35, 0.85, 1.0, 0.42), 1.0)
-		if unit.sensor_mode == TacticalUnit.SensorMode.ACTIVE:
-			draw_arc(center, _world_radius_to_map(unit.active_sensor_range), 0.0, TAU, 64, Color(1.0, 0.42, 0.88, 0.52), 1.0)
-		if unit.unit_profile.provides_fire_control:
-			draw_arc(center, _world_radius_to_map(unit.unit_profile.fire_control_share_range), 0.0, TAU, 64, Color(0.45, 1.0, 0.62, 0.58), 1.0)
-		if unit.unit_profile.missile_launch_range > 0.0:
+		if unit.show_support_ranges:
+			draw_arc(center, _world_radius_to_map(unit.sensor_range), 0.0, TAU, 64, Color(0.35, 0.85, 1.0, 0.42), 1.0)
+			if unit.sensor_mode == TacticalUnit.SensorMode.ACTIVE:
+				draw_arc(center, _world_radius_to_map(unit.active_sensor_range), 0.0, TAU, 64, Color(1.0, 0.42, 0.88, 0.52), 1.0)
+			if unit.provides_fire_control_data():
+				draw_arc(center, _world_radius_to_map(unit.get_data_link_range()), 0.0, TAU, 64, Color(0.45, 1.0, 0.62, 0.58), 1.0)
+		if unit.show_individual_weapon_ranges and unit.unit_profile.missile_launch_range > 0.0:
 			draw_arc(center, _world_radius_to_map(unit.unit_profile.missile_launch_range), 0.0, TAU, 64, Color(1.0, 0.72, 0.30, 0.52), 1.0)
 	for unit in friendly_units:
 		if not is_instance_valid(unit) or unit.destroyed:
@@ -76,7 +79,14 @@ func _draw() -> void:
 		var contact_position: Vector2 = unit.global_position
 		if unit.intel_state < TacticalUnit.IntelState.IDENTIFIED:
 			contact_position += unit.contact_offset
-		_draw_contact_symbol(_world_to_map(contact_position), unit.intel_state, unit.rotation)
+		var contact_center: Vector2 = _world_to_map(contact_position)
+		_draw_contact_symbol(contact_center, unit.intel_state, unit.rotation)
+		if (
+			unit.intel_state >= TacticalUnit.IntelState.TRACKED
+			and not tactical_root.selected_units.is_empty()
+			and tactical_root.tactical_overlay.has_fire_control_solution(unit)
+		):
+			draw_arc(contact_center, 6.0, 0.0, TAU, 16, Color(0.55, 1.0, 0.62, 0.92), 1.2)
 
 	var missiles_layer: Node2D = tactical_root.get("missiles_layer")
 	for missile in missiles_layer.get_children():
@@ -96,6 +106,58 @@ func _draw() -> void:
 		camera_world_rect.size / world_rect.size * size
 	)
 	draw_rect(camera_map_rect, Color(0.75, 0.94, 1.0, 0.85), false, 1.2)
+
+
+func _draw_engagement_envelopes() -> void:
+	if tactical_root.range_debug_enabled or tactical_root.selected_units.size() <= 1:
+		return
+	for group: Dictionary in tactical_root.tactical_overlay.engagement_groups:
+		_draw_minimap_coverage(
+			group.sensor,
+			Color(0.25, 0.82, 1.0, 0.025),
+			Color(0.35, 0.85, 1.0, 0.62)
+		)
+		_draw_minimap_coverage(
+			group.weapon,
+			Color(1.0, 0.55, 0.22, 0.035),
+			Color(1.0, 0.68, 0.30, 0.78)
+		)
+
+
+func _draw_fire_missions() -> void:
+	for mission: FireMission in tactical_root.active_fire_missions:
+		var color := Color("9bf0ff")
+		if mission.state == FireMission.State.BLOCKED:
+			color = Color("ffbd48")
+		elif mission.state == FireMission.State.FIRED:
+			color = Color("8dffaf")
+		draw_arc(
+			_world_to_map(mission.center),
+			_world_radius_to_map(mission.radius),
+			0.0,
+			TAU,
+			32,
+			Color(color, 0.82),
+			1.2
+		)
+func _draw_minimap_coverage(coverage: Dictionary, fill: Color, border: Color) -> void:
+	for world_source: PackedVector2Array in coverage.sources:
+		var map_source: PackedVector2Array = _world_polygon_to_map(world_source)
+		if map_source.size() >= 3:
+			draw_colored_polygon(map_source, fill)
+	for world_contour: PackedVector2Array in coverage.contours:
+		var map_contour: PackedVector2Array = _world_polygon_to_map(world_contour)
+		if map_contour.size() < 3:
+			continue
+		map_contour.append(map_contour[0])
+		draw_polyline(map_contour, border, 1.0, true)
+
+
+func _world_polygon_to_map(world_polygon: PackedVector2Array) -> PackedVector2Array:
+	var map_polygon := PackedVector2Array()
+	for world_point: Vector2 in world_polygon:
+		map_polygon.append(_world_to_map(world_point))
+	return map_polygon
 
 
 func _world_to_map(world_position: Vector2) -> Vector2:

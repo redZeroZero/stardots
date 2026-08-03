@@ -38,6 +38,7 @@ var classification_locked: bool = false
 var last_observation_channels: int = 0
 var bearing_observer_count: int = 0
 var triangulation_quality: float = 0.0
+var last_observation_source_ids: Array[int] = []
 
 
 func _init(new_observer_team_id: int, new_target: Node2D, target_acceleration: float) -> void:
@@ -58,7 +59,8 @@ func observe(
 	base_uncertainty: float,
 	observation_channels: int = 0,
 	observer_count: int = 1,
-	new_triangulation_quality: float = 0.0
+	new_triangulation_quality: float = 0.0,
+	observation_source_ids: Array = []
 ) -> void:
 	var observation_confidence: float = _confidence_for_state(observed_state)
 	observation_floor = maxf(observation_floor, observation_confidence)
@@ -67,6 +69,7 @@ func observe(
 	last_observation_channels = observation_channels
 	bearing_observer_count = maxi(1, observer_count)
 	triangulation_quality = clampf(new_triangulation_quality, 0.0, 1.0)
+	last_observation_source_ids.assign(observation_source_ids)
 	if observed_state >= State.TRACKED:
 		estimated_position = observed_position
 		estimated_velocity = observed_velocity

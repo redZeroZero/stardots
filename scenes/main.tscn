@@ -1,9 +1,10 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://src/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://src/tactical_minimap.gd" id="2_minimap"]
 [ext_resource type="Script" path="res://src/tactical_overlay.gd" id="3_overlay"]
 [ext_resource type="Script" path="res://src/tactical_labels.gd" id="4_labels"]
+[ext_resource type="Script" path="res://src/setup/skirmish_setup_panel.gd" id="5_skirmish_setup"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hud"]
 bg_color = Color(0.025, 0.055, 0.09, 0.88)
@@ -51,6 +52,80 @@ position_smoothing_enabled = true
 position_smoothing_speed = 8.0
 
 [node name="Interface" type="CanvasLayer" parent="."]
+
+[node name="SkirmishSetupPanel" type="PanelContainer" parent="Interface"]
+unique_name_in_owner = true
+visible = false
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 374.0
+offset_bottom = 500.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
+script = ExtResource("5_skirmish_setup")
+
+[node name="Content" type="VBoxContainer" parent="Interface/SkirmishSetupPanel"]
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Interface/SkirmishSetupPanel/Content"]
+theme_override_font_sizes/font_size = 20
+text = "PRÉPARER L’ESCARMOUCHE"
+
+[node name="Instructions" type="Label" parent="Interface/SkirmishSetupPanel/Content"]
+text = "Choisissez camp, groupe et bâtiment, puis cliquez\nsur la carte. Glissez une unité pour la déplacer."
+
+[node name="TeamLabel" type="Label" parent="Interface/SkirmishSetupPanel/Content"]
+text = "CAMP"
+
+[node name="DeploymentTeamOption" type="OptionButton" parent="Interface/SkirmishSetupPanel/Content"]
+unique_name_in_owner = true
+
+[node name="GroupLabel" type="Label" parent="Interface/SkirmishSetupPanel/Content"]
+text = "GROUPE TACTIQUE"
+
+[node name="DeploymentGroupOption" type="OptionButton" parent="Interface/SkirmishSetupPanel/Content"]
+unique_name_in_owner = true
+
+[node name="ShipLabel" type="Label" parent="Interface/SkirmishSetupPanel/Content"]
+text = "BÂTIMENT"
+
+[node name="DeploymentShipOption" type="OptionButton" parent="Interface/SkirmishSetupPanel/Content"]
+unique_name_in_owner = true
+
+[node name="DeploymentShipDescription" type="Label" parent="Interface/SkirmishSetupPanel/Content"]
+unique_name_in_owner = true
+text = "—"
+
+[node name="OrientationLabel" type="Label" parent="Interface/SkirmishSetupPanel/Content"]
+text = "UNITÉ SÉLECTIONNÉE"
+
+[node name="EditButtons" type="HBoxContainer" parent="Interface/SkirmishSetupPanel/Content"]
+theme_override_constants/separation = 6
+
+[node name="RotateLeftButton" type="Button" parent="Interface/SkirmishSetupPanel/Content/EditButtons"]
+unique_name_in_owner = true
+text = "↶ 15° [Q]"
+
+[node name="RotateRightButton" type="Button" parent="Interface/SkirmishSetupPanel/Content/EditButtons"]
+unique_name_in_owner = true
+text = "↷ 15° [E]"
+
+[node name="DeleteUnitButton" type="Button" parent="Interface/SkirmishSetupPanel/Content/EditButtons"]
+unique_name_in_owner = true
+text = "SUPPR."
+
+[node name="ClearDeploymentButton" type="Button" parent="Interface/SkirmishSetupPanel/Content"]
+unique_name_in_owner = true
+text = "VIDER LA CARTE"
+
+[node name="DeploymentStatusLabel" type="Label" parent="Interface/SkirmishSetupPanel/Content"]
+unique_name_in_owner = true
+text = "DÉPLOIEMENT  •  BLEU 0  •  ROUGE 0"
+
+[node name="LaunchSkirmishButton" type="Button" parent="Interface/SkirmishSetupPanel/Content"]
+unique_name_in_owner = true
+disabled = true
+custom_minimum_size = Vector2(0, 42)
+text = "LANCER LA BATAILLE"
 
 [node name="TopMargin" type="MarginContainer" parent="Interface"]
 anchors_preset = 10
@@ -111,7 +186,7 @@ unique_name_in_owner = true
 text = "TÉLÉMÉTRIE: EN ATTENTE"
 
 [node name="Scope" type="Label" parent="Interface/SecondaryInfo/Content"]
-text = "DROIT: DÉPLACER  •  A: TIR  •  W: ARME  •  D: DOCTRINE  •  S: CAPTEURS  •  F: FLOTTE  •  C: SÉLECTION"
+text = "DROIT: ORDRE  •  CTRL+DROIT: CAMÉRA  •  ALT+DROIT: TRAVERSER  •  A: TIR  •  W: ARME  •  D: DOCTRINE  •  V: ZONES"
 
 [node name="SelectionDock" type="MarginContainer" parent="Interface"]
 anchors_preset = 2
@@ -144,7 +219,7 @@ text = "MOTEURS: COUPER [X]"
 [node name="AttackModeButton" type="Button" parent="Interface/SelectionDock/Panel/Content/SystemsControls"]
 unique_name_in_owner = true
 text = "ATTAQUE [A]"
-tooltip_text = "Armer une salve sur une zone sans donner d'ordre de mouvement"
+tooltip_text = "Créer une mission de feu qui attend une cible et une solution valides sans déplacer les unités ; Échap annule la mission sélectionnée"
 
 [node name="FireControls" type="HBoxContainer" parent="Interface/SelectionDock/Panel/Content"]
 theme_override_constants/separation = 6
@@ -220,3 +295,21 @@ offset_bottom = -12.0
 unique_name_in_owner = true
 text = "↻  REJOUER"
 tooltip_text = "Relancer la mission"
+
+[node name="EditSetupMargin" type="MarginContainer" parent="Interface"]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -294.0
+offset_top = -54.0
+offset_right = -136.0
+offset_bottom = -12.0
+
+[node name="EditSetupButton" type="Button" parent="Interface/EditSetupMargin"]
+unique_name_in_owner = true
+text = "DÉPLOIEMENT"
+tooltip_text = "Revenir au déploiement actuel"

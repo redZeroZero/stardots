@@ -21,6 +21,7 @@ func _run() -> void:
 	var battlefield = load("res://src/main.gd").new()
 	battlefield.friendly_units.append(frigate)
 	battlefield.friendly_units.append(awacs)
+	battlefield._rebuild_data_link_networks()
 	var failures: Array[String] = []
 
 	if battlefield._sensor_range_ratio(frigate, target) <= 0.68:
@@ -33,6 +34,7 @@ func _run() -> void:
 		failures.append("l'AWACS dispose encore d'un armement missile")
 
 	frigate.global_position = Vector2(2000.0, 0.0)
+	battlefield._rebuild_data_link_networks()
 	if battlefield._launcher_has_fire_control_solution(frigate, target):
 		failures.append("la solution de tir reste partagée hors de la portée de liaison")
 	if battlefield._is_target_in_missile_range(frigate, target):

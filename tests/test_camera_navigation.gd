@@ -18,6 +18,33 @@ func _run() -> void:
 	if camera.position.distance_to(expected_position) > 0.01:
 		failures.append("le glisser de carte ne compense pas correctement le niveau de zoom")
 
+	battlefield._clear_selection()
+	var selected_unit: TacticalUnit = battlefield.friendly_units[0]
+	battlefield.selected_units.append(selected_unit)
+	selected_unit.set_selected(true)
+	var ctrl_right_press := InputEventMouseButton.new()
+	ctrl_right_press.button_index = MOUSE_BUTTON_RIGHT
+	ctrl_right_press.pressed = true
+	ctrl_right_press.ctrl_pressed = true
+	battlefield._handle_mouse_button(ctrl_right_press)
+	if not battlefield.is_panning_camera or battlefield.is_defining_move_order:
+		failures.append("Ctrl + clic droit ne donne pas priorité au déplacement de caméra avec une sélection")
+	var ctrl_right_release := InputEventMouseButton.new()
+	ctrl_right_release.button_index = MOUSE_BUTTON_RIGHT
+	ctrl_right_release.pressed = false
+	battlefield._handle_mouse_button(ctrl_right_release)
+	if battlefield.is_panning_camera or selected_unit.has_move_target:
+		failures.append("le déplacement caméra Ctrl + droit laisse un ordre de navigation parasite")
+
+	var alt_right_press := InputEventMouseButton.new()
+	alt_right_press.button_index = MOUSE_BUTTON_RIGHT
+	alt_right_press.pressed = true
+	alt_right_press.alt_pressed = true
+	battlefield._handle_mouse_button(alt_right_press)
+	if not battlefield.is_defining_move_order or not battlefield.move_order_fly_through:
+		failures.append("Alt + clic droit ne reprend pas l'ordre traversant déplacé depuis Ctrl")
+	battlefield.is_defining_move_order = false
+
 	var mouse_screen_position: Vector2 = battlefield.get_viewport().get_mouse_position()
 	var world_under_cursor: Vector2 = battlefield._world_position_under_screen(mouse_screen_position, camera.zoom.x, camera.position)
 	battlefield._set_camera_zoom(camera.zoom.x * 1.12)

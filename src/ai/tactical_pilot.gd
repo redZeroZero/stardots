@@ -44,7 +44,11 @@ func plan_engagement(unit: TacticalUnit, target: TacticalUnit) -> Dictionary:
 		maneuver_point = target.global_position + outward_direction * preferred_range
 
 	var saturation: bool = false
-	if system.family == WeaponSystemProfile.Family.MISSILE and system.feed_type == WeaponSystemProfile.FeedType.FIXED_CELLS:
+	if (
+		profile.allow_total_saturation
+		and system.family == WeaponSystemProfile.Family.MISSILE
+		and system.feed_type == WeaponSystemProfile.FeedType.FIXED_CELLS
+	):
 		var saturation_floor: int = ceili(float(system.ammunition_capacity) * profile.fixed_cell_saturation_ratio)
 		saturation = unit.get_weapon_system_ammunition(system) >= maxi(2, saturation_floor)
 

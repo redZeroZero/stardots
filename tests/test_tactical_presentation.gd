@@ -87,6 +87,21 @@ func _run() -> void:
 		failures.append("la zone de clic minimale n'est pas compensée au zoom stratégique")
 	unit.free()
 
+	var railgun_projectile := RailgunProjectile.new()
+	root.add_child(railgun_projectile)
+	railgun_projectile.set_visual_zoom(0.15)
+	if (
+		railgun_projectile.get_visual_trail_length() * 0.15
+		< RailgunProjectile.MINIMUM_TRAIL_LENGTH_PX - 0.01
+	):
+		failures.append("la traînée railgun disparaît au zoom stratégique")
+	if (
+		railgun_projectile.get_visual_head_radius() * 2.0 * 0.15
+		< RailgunProjectile.MINIMUM_HEAD_DIAMETER_PX - 0.01
+	):
+		failures.append("la tête du projectile railgun devient sous-pixel au dézoom")
+	railgun_projectile.free()
+
 	if not failures.is_empty():
 		for failure: String in failures:
 			push_error(failure)

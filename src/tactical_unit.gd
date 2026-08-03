@@ -31,6 +31,8 @@ const ATTITUDE_CORRECTION_DEADZONE: float = 1.0
 
 var callsign: String = "UNIT"
 var team_id: int = 0
+var team_roster_index: int = -1
+var tactical_group_id: int = 0
 var unit_profile: UnitProfile
 var weapon_system_profiles: Array[WeaponSystemProfile] = []
 var weapon_system_ammunition: Dictionary = {}
@@ -112,6 +114,8 @@ var has_move_target: bool = false
 var is_orienting_to_final_heading: bool = false
 var final_heading: float = 0.0
 var selected: bool = false
+var show_support_ranges: bool = true
+var show_individual_weapon_ranges: bool = false
 var intel_state: IntelState = IntelState.IDENTIFIED
 var contact_uncertainty_radius: float = 0.0
 var contact_offset: Vector2 = Vector2.ZERO
@@ -217,6 +221,14 @@ func set_selected(value: bool) -> void:
 	queue_redraw()
 
 
+func set_range_visualization(show_support: bool, show_weapons: bool) -> void:
+	if show_support_ranges == show_support and show_individual_weapon_ranges == show_weapons:
+		return
+	show_support_ranges = show_support
+	show_individual_weapon_ranges = show_weapons
+	queue_redraw()
+
+
 func set_visual_zoom(value: float) -> void:
 	var clamped_value: float = maxf(value, 0.001)
 	if is_equal_approx(visual_zoom, clamped_value):
@@ -250,6 +262,56 @@ func set_datalink_emission_mode(value: DatalinkEmissionMode) -> void:
 	datalink_emission_mode = value
 
 
+func can_receive_data() -> bool:
+	return unit_profile.data_link_profile != null and unit_profile.data_link_profile.can_receive
+
+
+func can_transmit_data() -> bool:
+	return unit_profile.data_link_profile != null and unit_profile.data_link_profile.can_transmit
+
+
+func can_relay_data() -> bool:
+	return unit_profile.data_link_profile != null and unit_profile.data_link_profile.can_relay
+
+
+func can_bridge_tactical_groups() -> bool:
+	return (
+		unit_profile.data_link_profile != null
+		and unit_profile.data_link_profile.can_bridge_groups
+	)
+
+
+func provides_fire_control_data() -> bool:
+	return (
+		unit_profile.data_link_profile != null
+		and unit_profile.data_link_profile.provides_fire_control
+	)
+
+
+func get_data_link_range() -> float:
+	return (
+		maxf(0.0, unit_profile.data_link_profile.transmission_range)
+		if unit_profile.data_link_profile != null
+		else 0.0
+	)
+
+
+func get_data_link_role_name() -> String:
+	if unit_profile.data_link_profile == null:
+		return "ISOLÉ"
+	if provides_fire_control_data() and can_relay_data():
+		return "RELAIS + CONDUITE"
+	if can_relay_data():
+		return "RELAIS"
+	if can_receive_data() and can_transmit_data():
+		return "TRANSCEIVER"
+	if can_receive_data():
+		return "RÉCEPTEUR"
+	if can_transmit_data():
+		return "ÉMETTEUR"
+	return "ISOLÉ"
+
+
 func get_electromagnetic_signature() -> float:
 	var radar_emission: float = (
 		unit_profile.active_radar_emission_strength
@@ -257,10 +319,11 @@ func get_electromagnetic_signature() -> float:
 		else 0.0
 	)
 	var link_emission: float = 0.0
-	if datalink_emission_mode == DatalinkEmissionMode.TRACK_SHARING:
-		link_emission = unit_profile.track_link_emission_strength
-	elif datalink_emission_mode == DatalinkEmissionMode.FIRE_CONTROL:
-		link_emission = unit_profile.fire_control_link_emission_strength
+	var link_profile: DataLinkProfile = unit_profile.data_link_profile
+	if link_profile != null and datalink_emission_mode == DatalinkEmissionMode.TRACK_SHARING:
+		link_emission = link_profile.track_emission_strength
+	elif link_profile != null and datalink_emission_mode == DatalinkEmissionMode.FIRE_CONTROL:
+		link_emission = link_profile.fire_control_emission_strength
 	return maxf(radar_emission, link_emission)
 
 
@@ -1125,22 +1188,24 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, selection_radius, 0.0, TAU, selection_segments, Color("9bf0ff"), important_stroke)
 		var range_stroke: float = TacticalPresentation.stroke_width(1.0, visual_zoom)
 		var range_alpha_boost: float = 1.35 if detail_level == TacticalPresentation.DetailLevel.STRATEGIC else 1.0
-		draw_arc(Vector2.ZERO, sensor_range, 0.0, TAU, TacticalPresentation.circle_segments(sensor_range, visual_zoom), Color(0.35, 0.85, 1.0, 0.18 * range_alpha_boost), range_stroke)
-		if sensor_mode == SensorMode.ACTIVE:
-			draw_arc(Vector2.ZERO, active_sensor_range, 0.0, TAU, TacticalPresentation.circle_segments(active_sensor_range, visual_zoom), Color(1.0, 0.42, 0.88, 0.28 * range_alpha_boost), TacticalPresentation.stroke_width(1.5, visual_zoom))
-		if unit_profile.provides_fire_control:
-			draw_arc(Vector2.ZERO, unit_profile.fire_control_share_range, 0.0, TAU, TacticalPresentation.circle_segments(unit_profile.fire_control_share_range, visual_zoom), Color(0.45, 1.0, 0.62, 0.30 * range_alpha_boost), TacticalPresentation.stroke_width(1.5, visual_zoom))
-		if weapon_system_profiles.is_empty():
-			_draw_weapon_range_arc(null, unit_profile.missile_launch_range, Color(1.0, 0.72, 0.30, 0.28 * range_alpha_boost), range_stroke)
-			_draw_weapon_range_arc(null, point_defense_range, Color(1.0, 0.45, 0.30, 0.30 * range_alpha_boost), range_stroke)
-		else:
-			for system: WeaponSystemProfile in weapon_system_profiles:
-				_draw_weapon_range_arc(
-					system,
-					system.maximum_range,
-					_weapon_arc_color(system, range_alpha_boost),
-					range_stroke
-				)
+		if show_support_ranges:
+			draw_arc(Vector2.ZERO, sensor_range, 0.0, TAU, TacticalPresentation.circle_segments(sensor_range, visual_zoom), Color(0.35, 0.85, 1.0, 0.18 * range_alpha_boost), range_stroke)
+			if sensor_mode == SensorMode.ACTIVE:
+				draw_arc(Vector2.ZERO, active_sensor_range, 0.0, TAU, TacticalPresentation.circle_segments(active_sensor_range, visual_zoom), Color(1.0, 0.42, 0.88, 0.28 * range_alpha_boost), TacticalPresentation.stroke_width(1.5, visual_zoom))
+			if provides_fire_control_data():
+				draw_arc(Vector2.ZERO, get_data_link_range(), 0.0, TAU, TacticalPresentation.circle_segments(get_data_link_range(), visual_zoom), Color(0.45, 1.0, 0.62, 0.30 * range_alpha_boost), TacticalPresentation.stroke_width(1.5, visual_zoom))
+		if show_individual_weapon_ranges:
+			if weapon_system_profiles.is_empty():
+				_draw_weapon_range_arc(null, unit_profile.missile_launch_range, Color(1.0, 0.72, 0.30, 0.28 * range_alpha_boost), range_stroke)
+				_draw_weapon_range_arc(null, point_defense_range, Color(1.0, 0.45, 0.30, 0.30 * range_alpha_boost), range_stroke)
+			else:
+				for system: WeaponSystemProfile in weapon_system_profiles:
+					_draw_weapon_range_arc(
+						system,
+						system.maximum_range,
+						_weapon_arc_color(system, range_alpha_boost),
+						range_stroke
+					)
 		var local_velocity_tip := to_local(global_position + velocity * 0.55)
 		if detail_level == TacticalPresentation.DetailLevel.STRATEGIC and local_velocity_tip.length() > 0.01:
 			local_velocity_tip = local_velocity_tip.normalized() * maxf(local_velocity_tip.length(), TacticalPresentation.world_size_for_screen_pixels(12.0, visual_zoom))
@@ -1214,6 +1279,8 @@ func _weapon_arc_color(system: WeaponSystemProfile, alpha_boost: float) -> Color
 		WeaponSystemProfile.Family.MISSILE:
 			if system.tactical_role == WeaponSystemProfile.TacticalRole.INTERCEPTOR:
 				return Color(0.55, 1.0, 0.62, 0.30 * alpha_boost)
+			if system.tactical_role == WeaponSystemProfile.TacticalRole.ANTI_RADIATION:
+				return Color(1.0, 0.35, 0.82, 0.32 * alpha_boost)
 	return Color(1.0, 0.72, 0.30, 0.28 * alpha_boost)
 
 
@@ -1238,7 +1305,7 @@ func _draw_contact_uncertainty(center: Vector2, symbol_radius: float, stroke: fl
 
 func _draw_launcher_status(alpha: float = 1.0) -> void:
 	if missile_launcher_count <= 0:
-		if unit_profile.provides_fire_control:
+		if provides_fire_control_data():
 			var awacs_color := Color(0.55, 1.0, 0.69, alpha)
 			draw_arc(Vector2.ZERO, 6.0, 0.0, TAU, 20, awacs_color, 1.5)
 			draw_line(Vector2(-10.0, 5.0), Vector2(10.0, 5.0), awacs_color, 1.5)

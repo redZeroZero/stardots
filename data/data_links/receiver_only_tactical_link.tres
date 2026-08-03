@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="DataLinkProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/data_link_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+can_receive = true
+can_transmit = false
+can_relay = false
+provides_fire_control = false
+transmission_range = 1200.0
+track_emission_strength = 0.20
+fire_control_emission_strength = 0.55

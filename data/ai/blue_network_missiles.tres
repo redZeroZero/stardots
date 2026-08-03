@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="TacticalPilotProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/tactical_pilot_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+display_name = "RÉSEAU / MISSILES"
+fire_control_target_bonus = 320.0
+railgun_target_bonus = 720.0
+retreat_hull_ratio = 0.3
+flank_offset = 0.0
+keep_fire_control_radar_active = true
+missile_damage_margin = 1.3
+missile_reserve_ratio = 0.25
+allow_total_saturation = false
+prefer_railgun = false
+fixed_cell_saturation_ratio = 0.4
+preferred_range_ratio = 0.86
+range_band_ratio = 0.1
+minimum_range_band = 55.0

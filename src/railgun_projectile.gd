@@ -1,6 +1,9 @@
 class_name RailgunProjectile
 extends Node2D
 
+const MINIMUM_TRAIL_LENGTH_PX: float = 8.0
+const MINIMUM_HEAD_DIAMETER_PX: float = 3.5
+
 var team_id: int = 0
 var velocity: Vector2 = Vector2.ZERO
 var damage: float = 0.0
@@ -57,8 +60,26 @@ func set_visual_zoom(value: float) -> void:
 
 
 func _draw() -> void:
-	if TacticalPresentation.detail_level(visual_zoom) == TacticalPresentation.DetailLevel.STRATEGIC:
-		return
 	var stroke: float = TacticalPresentation.stroke_width(2.2, visual_zoom)
-	draw_line(Vector2(-15.0, 0.0), Vector2(2.0, 0.0), Color(0.70, 0.90, 1.0, 0.45), stroke)
-	draw_circle(Vector2.ZERO, TacticalPresentation.compensated_radius(2.0, 2.5, visual_zoom), Color("d8f4ff"))
+	var trail_length: float = get_visual_trail_length()
+	var head_radius: float = get_visual_head_radius()
+	var strategic_alpha: float = TacticalPresentation.strategic_detail_alpha(visual_zoom)
+	draw_line(
+		Vector2(-trail_length, 0.0),
+		Vector2(head_radius, 0.0),
+		Color(0.70, 0.90, 1.0, lerpf(0.45, 0.78, strategic_alpha)),
+		stroke
+	)
+	draw_circle(Vector2.ZERO, head_radius, Color("d8f4ff"))
+
+
+func get_visual_trail_length() -> float:
+	return maxf(15.0, TacticalPresentation.world_size_for_screen_pixels(MINIMUM_TRAIL_LENGTH_PX, visual_zoom))
+
+
+func get_visual_head_radius() -> float:
+	return TacticalPresentation.compensated_radius(
+		2.0,
+		MINIMUM_HEAD_DIAMETER_PX,
+		visual_zoom
+	)

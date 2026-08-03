@@ -133,7 +133,10 @@ func _test_automatic_awacs_emission(failures: Array[String]) -> void:
 	battle._update_sensor_picture()
 	if awacs.datalink_emission_mode != TacticalUnit.DatalinkEmissionMode.FIRE_CONTROL:
 		failures.append("l'AWACS ne passe pas automatiquement en émission de conduite de tir")
-	if not is_equal_approx(awacs.get_electromagnetic_signature(), awacs_profile.fire_control_link_emission_strength):
+	if not is_equal_approx(
+		awacs.get_electromagnetic_signature(),
+		awacs_profile.data_link_profile.fire_control_emission_strength
+	):
 		failures.append("le flux électromagnétique AWACS ne suit pas son profil")
 	var hostile_track = battle._get_sensor_track(1, awacs)
 	if hostile_track == null or not bool(hostile_track.last_observation_channels & SENSOR_TRACK_SCRIPT.Channel.RADIO):

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="TacticalPilotProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/tactical_pilot_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+display_name = "RAIDERS / SILENCE"
+fire_control_target_bonus = 2200.0
+railgun_target_bonus = 0.0
+retreat_hull_ratio = 0.15
+flank_offset = 520.0
+keep_fire_control_radar_active = false
+missile_damage_margin = 1.15
+missile_reserve_ratio = 0.15
+allow_total_saturation = false
+prefer_railgun = true
+fixed_cell_saturation_ratio = 0.65
+preferred_range_ratio = 0.62
+range_band_ratio = 0.07
+minimum_range_band = 35.0

@@ -23,6 +23,11 @@ const WEAPON_PATHS: Array[String] = [
 	"res://data/weapons/anti_radiation_cells.tres",
 	"res://data/weapons/medium_railgun.tres",
 ]
+const DATA_LINK_PATHS: Array[String] = [
+	"res://data/data_links/standard_tactical_link.tres",
+	"res://data/data_links/receiver_only_tactical_link.tres",
+	"res://data/data_links/awacs_relay_link.tres",
+]
 
 
 func _init() -> void:
@@ -42,6 +47,19 @@ func _run() -> void:
 	var awacs_unit: UnitProfile = load("res://data/balance/awacs_unit.tres")
 	if default_unit.propulsion_profile == null or awacs_unit.propulsion_profile == null:
 		failures.append("les profils d'unité principaux n'utilisent pas les ressources de propulsion")
+	if (
+		not is_equal_approx(default_unit.sensor_range, 700.0)
+		or not is_equal_approx(default_unit.active_sensor_range, 1000.0)
+		or not is_equal_approx(default_unit.active_emission_detection_range, 1400.0)
+	):
+		failures.append("la frégate généraliste ne conserve pas son autonomie capteur intermédiaire")
+	if (
+		default_unit.data_link_profile == null
+		or not default_unit.data_link_profile.can_receive
+		or not default_unit.data_link_profile.can_transmit
+		or default_unit.data_link_profile.can_relay
+	):
+		failures.append("la frégate généraliste n'utilise pas une liaison transceiver sans relais")
 
 	var forward_mount: WeaponMountProfile = load(MOUNT_PATHS[0])
 	var port_mount: WeaponMountProfile = load(MOUNT_PATHS[1])
@@ -64,11 +82,17 @@ func _run() -> void:
 			failures.append("système d'arme sans montage : %s" % path)
 		elif weapon.maximum_range <= weapon.minimum_range:
 			failures.append("plage d'engagement invalide : %s" % path)
+	for path: String in DATA_LINK_PATHS:
+		var data_link: DataLinkProfile = load(path)
+		if data_link == null or not (data_link.can_receive or data_link.can_transmit):
+			failures.append("profil de liaison sans capacité : %s" % path)
+		elif data_link.can_transmit and data_link.transmission_range <= 0.0:
+			failures.append("profil émetteur sans portée : %s" % path)
 
 	if not failures.is_empty():
 		for failure: String in failures:
 			push_error(failure)
 		quit(1)
 		return
-	print("Profils technologiques validés : 4 propulsions, 5 montages et 8 systèmes d'arme.")
+	print("Profils technologiques validés : 4 propulsions, 3 liaisons, 5 montages et 8 systèmes d'arme.")
 	quit(0)

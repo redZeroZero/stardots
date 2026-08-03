@@ -1,9 +1,10 @@
-[gd_resource type="Resource" script_class="UnitProfile" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="UnitProfile" load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/config/unit_profile.gd" id="1_profile"]
 [ext_resource type="Resource" path="res://data/propulsion/vector_drive.tres" id="2_propulsion"]
 [ext_resource type="Resource" path="res://data/weapons/kinetic_pdc.tres" id="3_pdc"]
 [ext_resource type="Resource" path="res://data/weapons/medium_missile_tubes.tres" id="4_missiles"]
+[ext_resource type="Resource" path="res://data/data_links/standard_tactical_link.tres" id="5_link"]
 
 [resource]
 script = ExtResource("1_profile")
@@ -21,12 +22,11 @@ arrival_radius = 5.0
 station_keeping_speed = 8.0
 preferred_turn_radius = 90.0
 turn_anticipation = 0.75
-sensor_range = 420.0
-active_sensor_range = 560.0
-active_emission_detection_range = 720.0
+sensor_range = 700.0
+active_sensor_range = 1000.0
+active_emission_detection_range = 1400.0
 active_sensor_heat_per_second = 4.0
-provides_fire_control = false
-fire_control_share_range = 0.0
+data_link_profile = ExtResource("5_link")
 heat_capacity = 100.0
 initial_heat = 20.0
 passive_cooling_per_second = 2.5

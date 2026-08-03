@@ -33,8 +33,54 @@ func _run() -> void:
 		if not found:
 			failures.append("une plateforme du scénario ne possède pas son armement spécialisé")
 	var awacs: TacticalUnit = battlefield.friendly_units[4]
-	if not awacs.unit_profile.provides_fire_control or awacs.missile_launcher_count != 0:
+	if not awacs.provides_fire_control_data() or awacs.missile_launcher_count != 0:
 		failures.append("l'AWACS d'essai ne fournit pas une liaison de tir non armée")
+	battlefield.tactical_overlay._rebuild_engagement_groups()
+	if battlefield.tactical_overlay.engagement_groups.size() != 1:
+		failures.append("les zones des bâtiments reliés à l'AWACS ne forment pas une enveloppe commune")
+	else:
+		var common_group: Dictionary = battlefield.tactical_overlay.engagement_groups[0]
+		if common_group.sensor.contours.is_empty():
+			failures.append("la sélection multiple ne produit pas de veille nominale commune")
+		if common_group.weapon.sources.size() != 3:
+			failures.append("la vue AUTO ne conserve pas les trois armements offensifs disponibles")
+	if battlefield.tactical_overlay.fire_control_target_ids.is_empty():
+		failures.append("aucun réticule n'identifie les pistes possédant une solution de tir réelle")
+	for friendly: TacticalUnit in battlefield.friendly_units:
+		if friendly.show_support_ranges or friendly.show_individual_weapon_ranges:
+			failures.append("une sélection multiple conserve des cercles individuels en vue normale")
+			break
+	battlefield._toggle_range_debug()
+	battlefield.tactical_overlay._rebuild_engagement_groups()
+	if not battlefield.tactical_overlay.engagement_groups.is_empty():
+		failures.append("le blob reste visible en mode de portées détaillées")
+	if not battlefield.friendly_units[0].show_individual_weapon_ranges:
+		failures.append("le mode debug ne restaure pas les arcs d'armes individuels")
+	battlefield._toggle_range_debug()
+	battlefield.offensive_weapon_selection = battlefield.OffensiveWeaponSelection.MISSILES
+	battlefield.tactical_overlay._rebuild_engagement_groups()
+	if battlefield.tactical_overlay.engagement_groups[0].weapon.sources.size() != 2:
+		failures.append("W MISSILES ne filtre pas l'enveloppe sur les deux systèmes antinavires")
+	battlefield.offensive_weapon_selection = battlefield.OffensiveWeaponSelection.RAILGUN
+	battlefield.tactical_overlay._rebuild_engagement_groups()
+	if battlefield.tactical_overlay.engagement_groups[0].weapon.sources.size() != 1:
+		failures.append("W RAILGUN ne limite pas l'enveloppe au canon axial")
+	battlefield.offensive_weapon_selection = battlefield.OffensiveWeaponSelection.AUTO
+	awacs.global_position = Vector2(3000.0, 3000.0)
+	battlefield._rebuild_data_link_networks()
+	battlefield.tactical_overlay._rebuild_engagement_groups()
+	if battlefield.tactical_overlay.engagement_groups.size() != 5:
+		failures.append("la perte de conduite de tir produit %d enveloppes armées au lieu de cinq" % battlefield.tactical_overlay.engagement_groups.size())
+	battlefield._clear_selection()
+	var technical_unit: TacticalUnit = battlefield.friendly_units[1]
+	battlefield.selected_units.append(technical_unit)
+	technical_unit.set_selected(true)
+	battlefield._refresh_range_visualization()
+	battlefield.tactical_overlay._rebuild_engagement_groups()
+	if not technical_unit.show_support_ranges or not technical_unit.show_individual_weapon_ranges:
+		failures.append("une unité sélectionnée seule ne restaure pas son détail technique")
+	if not battlefield.tactical_overlay.engagement_groups.is_empty():
+		failures.append("une sélection unique conserve les enveloppes de task force")
 	for target: TacticalUnit in battlefield.enemy_units:
 		if not target.invulnerable or not target.fixed_in_place:
 			failures.append("un plastron n'est pas fixe et invulnérable")

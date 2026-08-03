@@ -40,13 +40,10 @@ enum PropulsionDoctrine {
 @export var active_sensor_range: float = 560.0
 @export var active_emission_detection_range: float = 720.0
 @export var active_sensor_heat_per_second: float = 4.0
-@export var provides_fire_control: bool = false
-@export var fire_control_share_range: float = 0.0
+@export var data_link_profile: DataLinkProfile
 
 @export_category("Émissions électromagnétiques")
 @export var active_radar_emission_strength: float = 1.0
-@export var track_link_emission_strength: float = 0.25
-@export var fire_control_link_emission_strength: float = 0.55
 
 @export_category("Thermique")
 @export var heat_capacity: float = 100.0
