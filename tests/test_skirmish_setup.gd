@@ -31,9 +31,9 @@ func _run() -> void:
 	else:
 		var frigate_profile: UnitProfile = frigate_entry["profile"]
 		var arsenal_profile: UnitProfile = arsenal_entry["profile"]
-		if frigate_profile.active_sensor_range != 1000.0 or not frigate_profile.data_link_profile.can_transmit:
+		if frigate_profile.active_sensor_range != 1800.0 or not frigate_profile.data_link_profile.can_transmit:
 			failures.append("la frégate n'a pas son capteur généraliste et son partage de pistes")
-		if arsenal_profile.active_sensor_range != 560.0 or arsenal_profile.data_link_profile.can_transmit:
+		if arsenal_profile.active_sensor_range != 1008.0 or arsenal_profile.data_link_profile.can_transmit:
 			failures.append("l'arsenal ne conserve pas son capteur court et sa réception seule")
 	if battle.units_layer.process_mode != Node.PROCESS_MODE_DISABLED:
 		failures.append("les unités peuvent simuler pendant le déploiement")

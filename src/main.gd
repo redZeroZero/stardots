@@ -41,9 +41,9 @@ const THEATER_RETURN_MARGIN: float = 180.0
 const RED_LINK_CYCLE_TICKS: int = 160
 const RED_LINK_BURST_START_TICK: int = 80
 const RED_LINK_BURST_DURATION_TICKS: int = 24
-const MIN_ZOOM: float = 0.15
+const MIN_ZOOM: float = 0.10
 const MAX_ZOOM: float = 2.2
-const WORLD_RECT := Rect2(-4096.0, -4096.0, 8192.0, 8192.0)
+const WORLD_RECT := Rect2(-6144.0, -6144.0, 12288.0, 12288.0)
 const BACKGROUND_COLOR := Color("07101f")
 const GRID_COLOR := Color(0.18, 0.32, 0.46, 0.22)
 const WORLD_BORDER_COLOR := Color(0.45, 0.86, 1.0, 0.72)
@@ -94,6 +94,7 @@ var red_fleet_pilot = TacticalPilotLogic.new(RED_FLEET_DOCTRINE)
 var enemy_tactical_pilot_enabled: bool = true
 var sensor_update_remaining: float = SENSOR_UPDATE_INTERVAL
 var sensor_tracks_by_team: Array[Dictionary] = [{}, {}]
+var contact_designation_counters: Array[int] = [0, 0]
 var tactical_groups_by_team: Array[Dictionary] = [{}, {}]
 var data_link_networks_by_team: Array = [DataLinkNetworkLogic.new(), DataLinkNetworkLogic.new()]
 var closest_local_target_indices_by_team: Array[PackedInt32Array] = [PackedInt32Array(), PackedInt32Array()]
@@ -105,6 +106,7 @@ var propulsion_demo: bool = OS.get_cmdline_user_args().has("--propulsion-demo")
 var weapons_demo: bool = OS.get_cmdline_user_args().has("--weapons-demo")
 var ai_demo: bool = OS.get_cmdline_user_args().has("--ai-demo")
 var sensor_demo: bool = OS.get_cmdline_user_args().has("--sensor-demo")
+var thermal_demo: bool = OS.get_cmdline_user_args().has("--thermal-demo")
 var radiation_demo: bool = OS.get_cmdline_user_args().has("--radiation-demo")
 var network_demo: bool = OS.get_cmdline_user_args().has("--network-demo")
 var fleet_battle_demo: bool = OS.get_cmdline_user_args().has("--fleet-battle-demo")
@@ -179,11 +181,11 @@ func _ready() -> void:
 		_begin_skirmish_setup()
 	else:
 		_spawn_demo_units()
-		if propulsion_demo or weapons_demo or sensor_demo or radiation_demo or network_demo:
+		if propulsion_demo or weapons_demo or sensor_demo or thermal_demo or radiation_demo or network_demo:
 			for unit: TacticalUnitScene in friendly_units:
 				selected_units.append(unit)
 				unit.set_selected(true)
-			if sensor_demo:
+			if sensor_demo or thermal_demo:
 				tactical_camera.position = Vector2(250.0, 360.0)
 				tactical_camera.zoom = Vector2.ONE * 0.50
 				target_camera_zoom = 0.50
@@ -207,7 +209,9 @@ func _ready() -> void:
 	elif ai_demo:
 		objective_label.text = "SCÉNARIO: PILOTE TACTIQUE IA — PORTÉE, CAP ET ARCS"
 	elif sensor_demo:
-		objective_label.text = "SCÉNARIO: VIEILLISSEMENT DE PISTE — OBSERVER LE CONTACT SORTANT"
+		objective_label.text = "SCÉNARIO: BLIPS FIXES — CLIC DROIT POUR APPROCHER, A PUIS CLIC POUR TIRER"
+	elif thermal_demo:
+		_update_thermal_demo_header()
 	elif propulsion_demo:
 		objective_label.text = "SCÉNARIO: COMPARATIF PROPULSION — F POUR CADRER"
 	elif skirmish_setup_enabled:
@@ -262,6 +266,7 @@ func _should_start_skirmish_setup() -> bool:
 			or weapons_demo
 			or ai_demo
 			or sensor_demo
+			or thermal_demo
 			or radiation_demo
 			or network_demo
 			or fleet_battle_demo
@@ -880,6 +885,8 @@ func _spawn_demo_units() -> void:
 		_spawn_ai_demo_units()
 	elif sensor_demo:
 		_spawn_sensor_demo_units()
+	elif thermal_demo:
+		_spawn_thermal_demo_units()
 	elif propulsion_demo:
 		_spawn_propulsion_demo_units()
 	elif DUEL_SANDBOX:
@@ -1017,25 +1024,32 @@ func _spawn_weapons_demo_units() -> void:
 
 func _spawn_fleet_battle_demo_units() -> void:
 	var laser_escort := _make_fleet_battle_profile(
-		"Escorte laser", "DÉFENSE LASER", [LASER_PDC_SYSTEM, SHORT_INTERCEPTOR_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
+		"Escorte laser", "ESCORTEUR", "DÉFENSE LASER",
+		[LASER_PDC_SYSTEM, SHORT_INTERCEPTOR_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
 	)
 	var kinetic_escort := _make_fleet_battle_profile(
-		"Escorte cinétique", "DÉFENSE CINÉTIQUE", [KINETIC_PDC_SYSTEM, SHORT_INTERCEPTOR_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
+		"Escorte cinétique", "ESCORTEUR", "DÉFENSE CINÉTIQUE",
+		[KINETIC_PDC_SYSTEM, SHORT_INTERCEPTOR_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
 	)
 	var frigate := _make_fleet_battle_profile(
-		"Frégate antinavire", "MISSILES MOYENS", [KINETIC_PDC_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
+		"Frégate antinavire", "FRÉGATE", "MISSILES MOYENS",
+		[KINETIC_PDC_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
 	)
 	var railgun := _make_fleet_battle_profile(
-		"Croiseur railgun", "RAILGUN AXIAL", [KINETIC_PDC_SYSTEM, RAILGUN_SYSTEM], false
+		"Croiseur railgun", "CROISEUR", "RAILGUN AXIAL",
+		[KINETIC_PDC_SYSTEM, RAILGUN_SYSTEM], false
 	)
 	var arsenal := _make_fleet_battle_profile(
-		"Porte-missiles", "CELLULES LONGUE PORTÉE", [KINETIC_PDC_SYSTEM, LONG_MISSILE_SYSTEM], false, true
+		"Porte-missiles", "PORTE-MISSILES", "CELLULES LONGUE PORTÉE",
+		[KINETIC_PDC_SYSTEM, LONG_MISSILE_SYSTEM], false, true
 	)
 	var anti_radiation := _make_fleet_battle_profile(
-		"Frégate de suppression", "ANTIRAD", [KINETIC_PDC_SYSTEM, ANTI_RADIATION_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
+		"Frégate de suppression", "FRÉGATE", "ANTIRAD",
+		[KINETIC_PDC_SYSTEM, ANTI_RADIATION_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
 	)
 	var passive_relay: UnitProfile = AWACS_PROFILE.duplicate(true)
 	passive_relay.display_name = "Relais passif"
+	passive_relay.classification_label = "RELAIS"
 	passive_relay.tactical_role = "RELAIS SILENCIEUX"
 	var blue_entries: Array[Dictionary] = [
 		{"suffix": "EYE", "profile": AWACS_PROFILE, "offset": Vector2(-430.0, 0.0), "active": true},
@@ -1093,6 +1107,7 @@ func _spawn_fleet_formation(
 
 func _make_fleet_battle_profile(
 	display_name: String,
+	classification_label: String,
 	role: String,
 	systems: Array[WeaponSystemProfile],
 	uses_legacy_missile_magazine: bool,
@@ -1100,6 +1115,7 @@ func _make_fleet_battle_profile(
 ) -> UnitProfile:
 	var profile: UnitProfile = UNIT_PROFILE.duplicate(true)
 	profile.display_name = display_name
+	profile.classification_label = classification_label
 	profile.tactical_role = role
 	profile.weapon_system_profiles = systems
 	if not uses_legacy_missile_magazine:
@@ -1111,8 +1127,8 @@ func _make_fleet_battle_profile(
 
 
 func _configure_receiver_only_arsenal(profile: UnitProfile) -> void:
-	profile.sensor_range = 420.0
-	profile.active_sensor_range = 560.0
+	profile.sensor_range = 378.0
+	profile.active_sensor_range = 1008.0
 	profile.active_emission_detection_range = 720.0
 	profile.data_link_profile = RECEIVER_ONLY_DATA_LINK
 
@@ -1257,28 +1273,98 @@ func _spawn_ai_demo_units() -> void:
 func _spawn_sensor_demo_units() -> void:
 	var sensor_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
 	sensor_profile.display_name = "Plateforme de veille"
+	sensor_profile.classification_label = "CAPTEUR"
 	sensor_profile.tactical_role = "CAPTEUR ACTIF"
 	sensor_profile.weapon_system_profiles = []
 	sensor_profile.missile_capacity = 0
 	sensor_profile.missile_launcher_count = 0
 	sensor_profile.point_defense_ammunition_capacity = 0
-	var sensor: TacticalUnitScene = _spawn_unit("SENSOR-01", 0, Vector2(-500.0, 360.0), sensor_profile)
+	var sensor: TacticalUnitScene = _spawn_unit("SENSOR-01", 0, Vector2(-600.0, 360.0), sensor_profile)
 	sensor.sensor_mode = TacticalUnitScene.SensorMode.ACTIVE
+	sensor.invulnerable = true
 
-	var target_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
-	target_profile.display_name = "Contact de calibration"
-	target_profile.tactical_role = "CIBLE MOBILE"
-	target_profile.weapon_system_profiles = []
-	target_profile.missile_capacity = 0
-	target_profile.missile_launcher_count = 0
-	target_profile.point_defense_ammunition_capacity = 0
-	var fast_drive: PropulsionProfile = VECTOR_DRIVE_PROFILE.duplicate(true)
-	fast_drive.tactical_speed_limit = 180.0
-	fast_drive.drive_acceleration = 90.0
-	target_profile.propulsion_profile = fast_drive
-	var target: TacticalUnitScene = _spawn_unit("CONTACT-01", 1, Vector2(-320.0, 360.0), target_profile)
-	target.invulnerable = true
-	target.set_navigation_order(Vector2(1500.0, 360.0), true)
+	var shooter_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
+	shooter_profile.display_name = "Frégate de tir de calibration"
+	shooter_profile.classification_label = "FRÉGATE"
+	shooter_profile.tactical_role = "MISSILES MOYENS"
+	var shooter: TacticalUnitScene = _spawn_unit("TIREUR-01", 0, Vector2(-520.0, 470.0), shooter_profile)
+	shooter.sensor_mode = TacticalUnitScene.SensorMode.PASSIVE
+	shooter.invulnerable = true
+
+	var target_center: Vector2 = sensor.global_position + Vector2(
+		sensor.active_sensor_range * 0.82,
+		0.0
+	)
+	var target_specs: Array[Dictionary] = [
+		{"callsign": "CONTACT-A", "position": target_center + Vector2(-40.0, -150.0), "class": "FRÉGATE"},
+		{"callsign": "CONTACT-B", "position": target_center + Vector2(0.0, -50.0), "class": "ESCORTEUR"},
+		{"callsign": "CONTACT-C", "position": target_center + Vector2(0.0, 50.0), "class": "CROISEUR"},
+		{"callsign": "CONTACT-D", "position": target_center + Vector2(-40.0, 150.0), "class": "PORTE-MISSILES"},
+	]
+	for spec: Dictionary in target_specs:
+		var target_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
+		target_profile.display_name = "Plastron fixe de calibration"
+		target_profile.classification_label = spec["class"]
+		target_profile.tactical_role = "PLASTRON FIXE"
+		target_profile.weapon_system_profiles = []
+		target_profile.missile_capacity = 0
+		target_profile.missile_launcher_count = 0
+		target_profile.point_defense_ammunition_capacity = 0
+		var target: TacticalUnitScene = _spawn_unit(
+			spec["callsign"],
+			1,
+			spec["position"],
+			target_profile
+		)
+		target.invulnerable = true
+		target.fixed_in_place = true
+		target.rotation = -PI * 0.5
+
+
+func _spawn_thermal_demo_units() -> void:
+	var sensor_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
+	sensor_profile.display_name = "Veilleur thermique de calibration"
+	sensor_profile.classification_label = "CAPTEUR"
+	sensor_profile.tactical_role = "VEILLE PASSIVE"
+	sensor_profile.weapon_system_profiles = []
+	sensor_profile.missile_capacity = 0
+	sensor_profile.missile_launcher_count = 0
+	sensor_profile.point_defense_ammunition_capacity = 0
+	var sensor: TacticalUnitScene = _spawn_unit(
+		"VEILLE-IR",
+		0,
+		Vector2(-600.0, 360.0),
+		sensor_profile
+	)
+	sensor.sensor_mode = TacticalUnitScene.SensorMode.ACTIVE
+	sensor.invulnerable = true
+
+	var target_specs: Array[Dictionary] = [
+		{"callsign": "CIBLE-FROIDE", "position": Vector2(140.0, 260.0), "heat": 0.0, "class": "COQUE FROIDE"},
+		{"callsign": "CIBLE-CHAUDE", "position": Vector2(140.0, 460.0), "heat": 100.0, "class": "COQUE CHAUDE"},
+	]
+	for spec: Dictionary in target_specs:
+		var target_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
+		target_profile.display_name = "Cible thermique étalonnée"
+		target_profile.classification_label = spec["class"]
+		target_profile.tactical_role = "CALIBRATION IR"
+		target_profile.weapon_system_profiles = []
+		target_profile.missile_capacity = 0
+		target_profile.missile_launcher_count = 0
+		target_profile.point_defense_ammunition_capacity = 0
+		target_profile.data_link_profile = null
+		target_profile.initial_heat = spec["heat"]
+		var target: TacticalUnitScene = _spawn_unit(
+			spec["callsign"],
+			1,
+			spec["position"],
+			target_profile
+		)
+		target.invulnerable = true
+		target.fixed_in_place = true
+		target.rotation = -PI * 0.5
+		if target.callsign == "CIBLE-CHAUDE":
+			target.thermal_mode = TacticalUnitScene.ThermalMode.COMBAT
 
 
 func _spawn_unit(callsign: String, team_id: int, start_position: Vector2, profile: UnitProfile) -> TacticalUnitScene:
@@ -1788,7 +1874,9 @@ func _update_command_picture_from_groups(team_id: int) -> void:
 			group_track.last_observation_channels,
 			group_track.bearing_observer_count,
 			group_track.triangulation_quality,
-			group_track.last_observation_source_ids
+			group_track.last_observation_source_ids,
+			group_track.classification_state,
+			group_track.classification_label
 		)
 
 
@@ -2042,7 +2130,10 @@ func _record_sensor_observation(
 	var passive_state: int = SensorTrackLogic.State.HIDDEN
 	var passive_uncertainty: float = SensorTrackLogic.MAXIMUM_UNCERTAINTY
 	var triangulated: bool = observer_count >= 2 and triangulation_quality >= 0.08
-	if best_passive_ratio_squared <= 0.68 * 0.68:
+	if bool(observation_channels & SensorTrackLogic.Channel.THERMAL):
+		passive_state = SensorTrackLogic.State.IDENTIFIED
+		passive_uncertainty = 2.0
+	elif best_passive_ratio_squared <= 0.68 * 0.68:
 		passive_state = SensorTrackLogic.State.TRACKED
 		passive_uncertainty = 20.0
 	elif best_passive_ratio_squared <= 1.0 and triangulated:
@@ -2065,6 +2156,10 @@ func _record_sensor_observation(
 		observed_velocity = Vector2.ZERO
 	if observed_state == SensorTrackLogic.State.HIDDEN:
 		return
+	var observed_classification: int = SensorTrackLogic.classification_for_observation(
+		observed_state,
+		observation_channels
+	)
 	var track = _get_or_create_sensor_track(observer_team_id, target)
 	track.observe(
 		observed_state,
@@ -2074,7 +2169,9 @@ func _record_sensor_observation(
 		observation_channels,
 		observer_count,
 		triangulation_quality,
-		observation_source_ids
+		observation_source_ids,
+		observed_classification,
+		target.unit_profile.classification_label
 	)
 
 
@@ -2101,11 +2198,14 @@ func _get_or_create_sensor_track(observer_team_id: int, target: TacticalUnitScen
 	var team_tracks: Dictionary = sensor_tracks_by_team[observer_team_id]
 	var target_id: int = target.get_instance_id()
 	if not team_tracks.has(target_id):
-		team_tracks[target_id] = SensorTrackLogic.new(
+		var track = SensorTrackLogic.new(
 			observer_team_id,
 			target,
 			target.maximum_acceleration
 		)
+		contact_designation_counters[observer_team_id] += 1
+		track.designation = "BANDIT-%02d" % contact_designation_counters[observer_team_id]
+		team_tracks[target_id] = track
 	return team_tracks[target_id]
 
 
@@ -2188,7 +2288,8 @@ func _local_detection_ratio_squared(unit: TacticalUnitScene, target: TacticalUni
 func _sync_player_sensor_picture() -> void:
 	var signal_count: int = 0
 	var tracked_count: int = 0
-	var identified_count: int = 0
+	var estimated_type_count: int = 0
+	var confirmed_type_count: int = 0
 	var radio_count: int = 0
 	var triangulated_count: int = 0
 	for enemy: TacticalUnitScene in enemy_units:
@@ -2196,25 +2297,35 @@ func _sync_player_sensor_picture() -> void:
 			continue
 		var track = _get_sensor_track(0, enemy)
 		var new_state: int = SensorTrackLogic.State.HIDDEN if track == null else track.get_state()
-		if new_state == SensorTrackLogic.State.IDENTIFIED:
-			identified_count += 1
-		elif new_state == SensorTrackLogic.State.TRACKED:
+		if new_state >= SensorTrackLogic.State.TRACKED:
 			tracked_count += 1
 		elif new_state == SensorTrackLogic.State.SIGNAL:
 			signal_count += 1
+		if track != null and track.classification_state == SensorTrackLogic.Classification.ESTIMATED:
+			estimated_type_count += 1
+		elif track != null and track.classification_state == SensorTrackLogic.Classification.CONFIRMED:
+			confirmed_type_count += 1
 		if track == null:
 			enemy.set_sensor_contact(TacticalUnitScene.IntelState.HIDDEN, enemy.global_position, 0.0)
 		else:
-			enemy.set_sensor_contact(new_state, track.estimated_position, track.uncertainty_radius)
+			enemy.set_sensor_contact(
+				new_state,
+				track.estimated_position,
+				track.uncertainty_radius,
+				track.designation,
+				track.classification_state,
+				track.classification_label
+			)
 			if bool(track.last_observation_channels & SensorTrackLogic.Channel.RADIO):
 				radio_count += 1
 			if bool(track.last_observation_channels & SensorTrackLogic.Channel.TRIANGULATED):
 				triangulated_count += 1
 
-	intel_label.text = "RENSEIGNEMENT: %d SIGNAL  •  %d PISTE  •  %d IDENTIFIÉ  //  TRI %d  •  EM %d" % [
+	intel_label.text = "RENSEIGNEMENT: %d CONTACT  •  %d PISTE  //  TYPE %d?  •  %d CONF.  //  TRI %d  •  EM %d" % [
 		signal_count,
 		tracked_count,
-		identified_count,
+		estimated_type_count,
+		confirmed_type_count,
 		triangulated_count,
 		radio_count,
 	]
@@ -2778,7 +2889,7 @@ func _launch_missile_salvo(
 
 
 func _update_ai(delta: float) -> void:
-	if weapons_demo or sensor_demo:
+	if weapons_demo or sensor_demo or thermal_demo:
 		return
 	ai_decision_remaining -= delta
 	if ai_decision_remaining > 0.0:
@@ -3289,7 +3400,10 @@ func _team_has_track(observer_team_id: int, target: TacticalUnitScene) -> bool:
 		if _sensor_range_ratio_squared(sensor, target) <= 0.68 * 0.68:
 			return true
 	if objective_station != null and objective_station.team_id == observer_team_id:
-		if objective_station.global_position.distance_to(target.global_position) <= objective_station.sensor_range * target.get_thermal_signature() * 0.68:
+		if (
+			objective_station.global_position.distance_to(target.global_position)
+			<= objective_station.sensor_range * target.get_passive_detection_signature() * 0.68
+		):
 			return true
 	return false
 
@@ -3307,7 +3421,7 @@ func _sensor_range_ratio_squared(
 	var thermal_signature: float = (
 		target_thermal_signature
 		if target_thermal_signature >= 0.0
-		else target.get_thermal_signature()
+		else target.get_passive_detection_signature()
 	)
 	return _sensor_range_ratio_squared_at_distance(
 		sensor,
@@ -3565,6 +3679,35 @@ func _update_status() -> void:
 		red_alive, enemy_units.size(), red_ammunition, missiles_launched[1], missile_impacts[1], missile_interceptions[1],
 	]
 	_update_selection_details()
+	if thermal_demo:
+		_update_thermal_demo_header()
+
+
+func _update_thermal_demo_header() -> void:
+	if friendly_units.is_empty():
+		return
+	var cold_target: TacticalUnitScene
+	var hot_target: TacticalUnitScene
+	for target: TacticalUnitScene in enemy_units:
+		if target.callsign == "CIBLE-FROIDE":
+			cold_target = target
+		elif target.callsign == "CIBLE-CHAUDE":
+			hot_target = target
+	if cold_target == null or hot_target == null:
+		return
+	var sensor: TacticalUnitScene = friendly_units[0]
+	var cold_signature: float = cold_target.get_passive_detection_signature()
+	var hot_signature: float = hot_target.get_passive_detection_signature()
+	objective_label.text = (
+		"THERMIQUE — S: ACTIF/PASSIF  •  FROID IR %.2f → %.0f  •  CHAUD IR %.2f → %.0f  •  CAPTEUR %s"
+		% [
+			cold_signature,
+			sensor.sensor_range * cold_signature,
+			hot_signature,
+			sensor.sensor_range * hot_signature,
+			sensor.get_sensor_mode_name(),
+		]
+	)
 
 
 func _get_selected_fire_mission_status() -> String:

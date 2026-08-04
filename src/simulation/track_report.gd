@@ -9,6 +9,8 @@ var confidence: float
 var source_group_id: int
 var source_ids: Array[int] = []
 var channels: int
+var classification_state: SensorTrack.Classification = SensorTrack.Classification.UNKNOWN
+var classification_label: String = ""
 
 
 static func from_track(track: SensorTrack, group_id: int) -> TrackReport:
@@ -21,4 +23,6 @@ static func from_track(track: SensorTrack, group_id: int) -> TrackReport:
 	report.source_group_id = group_id
 	report.source_ids.assign(track.last_observation_source_ids)
 	report.channels = track.last_observation_channels
+	report.classification_state = track.classification_state
+	report.classification_label = track.classification_label
 	return report

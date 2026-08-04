@@ -11,8 +11,10 @@ func _init() -> void:
 func _run() -> void:
 	var failures: Array[String] = []
 	_test_track_prediction_and_aging(failures)
+	_test_independent_classification(failures)
 	_test_battlefield_fusion(failures)
 	_test_sensor_demo(failures)
+	_test_thermal_demo(failures)
 	_test_automatic_awacs_emission(failures)
 	_test_passive_triangulation(failures)
 	if not failures.is_empty():
@@ -52,6 +54,57 @@ func _test_track_prediction_and_aging(failures: Array[String]) -> void:
 	target.free()
 
 
+func _test_independent_classification(failures: Array[String]) -> void:
+	var target := Node2D.new()
+	root.add_child(target)
+	var track = SENSOR_TRACK_SCRIPT.new(0, target, 20.0)
+	track.observe(
+		SENSOR_TRACK_SCRIPT.State.SIGNAL,
+		Vector2.ZERO,
+		Vector2.ZERO,
+		90.0,
+		SENSOR_TRACK_SCRIPT.Channel.THERMAL
+	)
+	if track.classification_state != SENSOR_TRACK_SCRIPT.Classification.UNKNOWN:
+		failures.append("un simple signal thermique révèle déjà le type du contact")
+	track.observe(
+		SENSOR_TRACK_SCRIPT.State.TRACKED,
+		Vector2.ZERO,
+		Vector2.ZERO,
+		20.0,
+		SENSOR_TRACK_SCRIPT.Channel.THERMAL,
+		1,
+		0.0,
+		[],
+		SENSOR_TRACK_SCRIPT.Classification.ESTIMATED,
+		"FRÉGATE"
+	)
+	if track.get_classification_display() != "FRÉGATE ?":
+		failures.append("la classification probable n'est pas distinguée de la confirmation")
+	track.begin_sensor_pass()
+	track.advance(4.0)
+	if (
+		track.get_state() == SENSOR_TRACK_SCRIPT.State.TRACKED
+		or track.classification_state != SENSOR_TRACK_SCRIPT.Classification.ESTIMATED
+	):
+		failures.append("la classification ne reste pas indépendante du vieillissement cinématique")
+	track.observe(
+		SENSOR_TRACK_SCRIPT.State.TRACKED,
+		Vector2.ZERO,
+		Vector2.ZERO,
+		20.0,
+		SENSOR_TRACK_SCRIPT.Channel.ACTIVE_RADAR,
+		1,
+		0.0,
+		[],
+		SENSOR_TRACK_SCRIPT.Classification.CONFIRMED,
+		"FRÉGATE"
+	)
+	if track.get_state() != SENSOR_TRACK_SCRIPT.State.TRACKED or track.get_classification_display() != "FRÉGATE":
+		failures.append("la confirmation du type modifie la qualité cinématique de la piste")
+	target.free()
+
+
 func _test_battlefield_fusion(failures: Array[String]) -> void:
 	var battle = BATTLE_SCENE.instantiate()
 	battle.benchmark_empty_scenario = true
@@ -67,10 +120,14 @@ func _test_battlefield_fusion(failures: Array[String]) -> void:
 	battle._update_sensor_picture()
 	var friendly_track = battle._get_sensor_track(0, enemy)
 	var enemy_track = battle._get_sensor_track(1, friendly)
-	if friendly_track == null or friendly_track.get_state() != SENSOR_TRACK_SCRIPT.State.TRACKED:
+	if friendly_track == null or friendly_track.get_state() != SENSOR_TRACK_SCRIPT.State.IDENTIFIED:
 		failures.append("le camp bleu ne fusionne pas son observation proche")
-	if enemy_track == null or enemy_track.get_state() != SENSOR_TRACK_SCRIPT.State.TRACKED:
+	if enemy_track == null or enemy_track.get_state() != SENSOR_TRACK_SCRIPT.State.IDENTIFIED:
 		failures.append("le camp rouge ne possède pas son propre tableau de pistes")
+	if friendly_track != null and friendly_track.designation != "BANDIT-01":
+		failures.append("la première piste hostile ne reçoit pas une désignation stable")
+	if enemy.get_contact_label() != "BANDIT-01 — FRÉGATE":
+		failures.append("la présentation passive proche ne confirme pas le type")
 
 	enemy.global_position = Vector2(3000.0, 0.0)
 	enemy.velocity = Vector2(25.0, 0.0)
@@ -91,29 +148,79 @@ func _test_sensor_demo(failures: Array[String]) -> void:
 	root.add_child(battle)
 	battle.set_process(false)
 	battle.set_physics_process(false)
-	if battle.friendly_units.size() != 1 or battle.enemy_units.size() != 1:
-		failures.append("le scénario capteurs ne contient pas un observateur et un contact")
-	elif battle.enemy_units[0].navigation_route.is_empty():
-		failures.append("le contact du scénario capteurs ne possède pas sa route de sortie")
-	if battle.selected_units.size() != 1 or battle.selected_units[0].sensor_mode != TacticalUnit.SensorMode.ACTIVE:
-		failures.append("la plateforme de veille n'est pas sélectionnée avec son radar actif")
-	if not battle.enemy_units[0].invulnerable:
-		failures.append("le contact de calibration peut être détruit")
-	var observed_states: Dictionary = {}
-	var target: TacticalUnit = battle.enemy_units[0]
-	for _tick: int in 700:
-		target._physics_process(0.05)
-		battle._advance_sensor_tracks(0.05)
-		battle._update_sensor_picture_if_due(0.05)
-		observed_states[target.intel_state] = true
-	for expected_state: int in [
-		TacticalUnit.IntelState.IDENTIFIED,
-		TacticalUnit.IntelState.TRACKED,
-		TacticalUnit.IntelState.SIGNAL,
-		TacticalUnit.IntelState.HIDDEN,
-	]:
-		if not observed_states.has(expected_state):
-			failures.append("le scénario capteurs ne traverse pas l'état de renseignement %d" % expected_state)
+	if battle.friendly_units.size() != 2 or battle.enemy_units.size() != 4:
+		failures.append("le scénario capteurs ne contient pas le capteur, le tireur et quatre contacts")
+		battle.free()
+		return
+	var sensor: TacticalUnit = battle.friendly_units[0]
+	var shooter: TacticalUnit = battle.friendly_units[1]
+	if (
+		battle.selected_units.size() != 2
+		or sensor.sensor_mode != TacticalUnit.SensorMode.ACTIVE
+		or shooter.get_anti_ship_burst_capacity() <= 0
+	):
+		failures.append("le capteur actif et le tireur missile ne sont pas prêts et sélectionnés")
+	battle.tactical_overlay._rebuild_engagement_groups()
+	var has_passive_envelope: bool = false
+	var has_active_envelope: bool = false
+	for group: Dictionary in battle.tactical_overlay.engagement_groups:
+		has_passive_envelope = has_passive_envelope or not group.passive_sensor.contours.is_empty()
+		has_active_envelope = has_active_envelope or not group.active_sensor.contours.is_empty()
+	if not has_passive_envelope or not has_active_envelope:
+		failures.append("la démo ne distingue pas les enveloppes passive et active")
+	battle._update_sensor_picture()
+	for target: TacticalUnit in battle.enemy_units:
+		var initial_track = battle._get_sensor_track(0, target)
+		if not target.invulnerable or not target.fixed_in_place:
+			failures.append("un contact de la formation n'est pas fixe et indestructible")
+		if initial_track == null or initial_track.get_state() != SENSOR_TRACK_SCRIPT.State.SIGNAL:
+			failures.append("un contact de la formation n'apparaît pas initialement comme blip")
+		if battle._launcher_has_fire_control_solution(shooter, target):
+			failures.append("le tireur possède déjà une solution sur un simple blip")
+	sensor.global_position = battle.enemy_units[0].global_position - Vector2(500.0, 0.0)
+	battle._update_sensor_picture()
+	for target: TacticalUnit in battle.enemy_units:
+		var acquired_track = battle._get_sensor_track(0, target)
+		if acquired_track == null or acquired_track.get_state() != SENSOR_TRACK_SCRIPT.State.IDENTIFIED:
+			failures.append("la portée passive garantie ne révèle pas le vaisseau")
+		elif not battle._launcher_has_fire_control_solution(shooter, target):
+			failures.append("le tireur ne reçoit pas de solution après l'acquisition")
+	battle.free()
+
+
+func _test_thermal_demo(failures: Array[String]) -> void:
+	var battle = BATTLE_SCENE.instantiate()
+	battle.thermal_demo = true
+	root.add_child(battle)
+	battle.set_process(false)
+	battle.set_physics_process(false)
+	if battle.friendly_units.size() != 1 or battle.enemy_units.size() != 2:
+		failures.append("la démo thermique ne contient pas le veilleur et ses deux cibles")
+		battle.free()
+		return
+	var sensor: TacticalUnit = battle.friendly_units[0]
+	var cold_target: TacticalUnit = battle.enemy_units[0]
+	var hot_target: TacticalUnit = battle.enemy_units[1]
+	if sensor.sensor_mode != TacticalUnit.SensorMode.ACTIVE:
+		failures.append("la démo thermique ne commence pas avec les deux références visibles au radar")
+	var cold_distance: float = sensor.global_position.distance_to(cold_target.global_position)
+	var hot_distance: float = sensor.global_position.distance_to(hot_target.global_position)
+	if sensor.sensor_range * cold_target.get_passive_detection_signature() >= cold_distance:
+		failures.append("la cible froide n'est pas au-delà de la garantie passive")
+	if sensor.sensor_range * hot_target.get_passive_detection_signature() <= hot_distance:
+		failures.append("la chaleur n'étend pas la portée passive jusqu'à la cible chaude")
+	sensor.sensor_mode = TacticalUnit.SensorMode.PASSIVE
+	battle._update_sensor_picture()
+	var cold_track = battle._get_sensor_track(0, cold_target)
+	var hot_track = battle._get_sensor_track(0, hot_target)
+	if cold_track == null or cold_track.observation_floor > 0.0:
+		failures.append("la cible froide reste observée hors de la portée passive nominale")
+	if (
+		hot_track == null
+		or hot_track.observation_floor < SENSOR_TRACK_SCRIPT.IDENTIFIED_CONFIDENCE
+		or not bool(hot_track.last_observation_channels & SENSOR_TRACK_SCRIPT.Channel.THERMAL)
+	):
+		failures.append("la cible chaude n'est pas maintenue par le canal thermique passif")
 	battle.free()
 
 
@@ -160,11 +267,13 @@ func _test_passive_triangulation(failures: Array[String]) -> void:
 	profile.weapon_system_profiles = []
 	profile.missile_capacity = 0
 	profile.missile_launcher_count = 0
+	profile.sensor_range = 100.0
 	var first: TacticalUnit = battle._spawn_unit("CAPTEUR-A", 0, Vector2(-200.0, -100.0), profile)
 	var second: TacticalUnit = battle._spawn_unit("CAPTEUR-B", 0, Vector2(-200.0, 100.0), profile)
 	var target: TacticalUnit = battle._spawn_unit("SOURCE", 1, Vector2(100.0, 0.0), profile)
 	first.sensor_mode = TacticalUnit.SensorMode.PASSIVE
 	second.sensor_mode = TacticalUnit.SensorMode.PASSIVE
+	target.sensor_mode = TacticalUnit.SensorMode.ACTIVE
 	battle._update_sensor_picture()
 	var track = battle._get_sensor_track(0, target)
 	if track == null or track.get_state() != SENSOR_TRACK_SCRIPT.State.TRACKED:

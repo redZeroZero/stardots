@@ -8,6 +8,12 @@ enum IntelState {
 	IDENTIFIED,
 }
 
+enum ClassificationState {
+	UNKNOWN,
+	ESTIMATED,
+	CONFIRMED,
+}
+
 enum SensorMode {
 	PASSIVE,
 	ACTIVE,
@@ -27,6 +33,7 @@ enum DatalinkEmissionMode {
 
 const BODY_RADIUS: float = 9.0
 const SELECTION_RADIUS: float = 15.0
+const IDENTIFIED_SYMBOL_EXTENT_MULTIPLIER: float = 1.45
 const ATTITUDE_CORRECTION_DEADZONE: float = 1.0
 
 var callsign: String = "UNIT"
@@ -53,10 +60,11 @@ var arrival_radius: float = 5.0
 var station_keeping_speed: float = 8.0
 var preferred_turn_radius: float = 90.0
 var turn_anticipation: float = 0.75
-var sensor_range: float = 420.0
-var active_sensor_range: float = 560.0
+var sensor_range: float = 378.0
+var active_sensor_range: float = 1008.0
 var active_emission_detection_range: float = 720.0
-var active_sensor_heat_per_second: float = 4.0
+var active_sensor_heat_per_second: float = 3.0
+var minimum_passive_signature: float = 1.0
 var sensor_mode: SensorMode = SensorMode.PASSIVE
 var datalink_emission_mode: DatalinkEmissionMode = DatalinkEmissionMode.SILENT
 var heat_capacity: float = 100.0
@@ -119,6 +127,10 @@ var show_individual_weapon_ranges: bool = false
 var intel_state: IntelState = IntelState.IDENTIFIED
 var contact_uncertainty_radius: float = 0.0
 var contact_offset: Vector2 = Vector2.ZERO
+var contact_pulse_elapsed: float = 0.0
+var contact_designation: String = ""
+var contact_classification_state: ClassificationState = ClassificationState.UNKNOWN
+var contact_classification_label: String = ""
 var impact_flash_remaining: float = 0.0
 var defense_fire_remaining: float = 0.0
 var defense_target_position: Vector2 = Vector2.ZERO
@@ -168,6 +180,7 @@ func configure(new_callsign: String, new_team_id: int, start_position: Vector2, 
 	active_sensor_range = profile.active_sensor_range
 	active_emission_detection_range = profile.active_emission_detection_range
 	active_sensor_heat_per_second = profile.active_sensor_heat_per_second
+	minimum_passive_signature = profile.minimum_passive_signature
 	heat_capacity = profile.heat_capacity
 	heat = clampf(profile.initial_heat, 0.0, heat_capacity)
 	passive_cooling_per_second = profile.passive_cooling_per_second
@@ -501,23 +514,52 @@ func _refresh_active_leg_plan() -> void:
 func set_intel_state(value: IntelState, uncertainty_offset: Vector2 = Vector2.ZERO) -> void:
 	if intel_state == value and contact_offset == uncertainty_offset:
 		return
+	if value == IntelState.SIGNAL and intel_state != IntelState.SIGNAL:
+		contact_pulse_elapsed = 0.0
 	intel_state = value
 	contact_offset = uncertainty_offset
 	queue_redraw()
 
 
-func set_sensor_contact(value: IntelState, estimated_position: Vector2, uncertainty_radius: float) -> void:
+func set_sensor_contact(
+	value: IntelState,
+	estimated_position: Vector2,
+	uncertainty_radius: float,
+	designation: String = "",
+	classification_state: ClassificationState = ClassificationState.UNKNOWN,
+	classification_label: String = ""
+) -> void:
 	var offset: Vector2 = estimated_position - global_position
 	if (
 		intel_state == value
 		and contact_offset.distance_to(offset) <= 0.01
 		and is_equal_approx(contact_uncertainty_radius, uncertainty_radius)
+		and contact_designation == designation
+		and contact_classification_state == classification_state
+		and contact_classification_label == classification_label
 	):
 		return
+	if value == IntelState.SIGNAL and intel_state != IntelState.SIGNAL:
+		contact_pulse_elapsed = 0.0
 	intel_state = value
 	contact_offset = offset
 	contact_uncertainty_radius = maxf(0.0, uncertainty_radius)
+	contact_designation = designation
+	contact_classification_state = classification_state
+	contact_classification_label = classification_label
 	queue_redraw()
+
+
+func get_contact_label() -> String:
+	var designation: String = contact_designation if not contact_designation.is_empty() else "BANDIT"
+	if (
+		contact_classification_state == ClassificationState.UNKNOWN
+		or contact_classification_label.is_empty()
+	):
+		return designation
+	if contact_classification_state == ClassificationState.ESTIMATED:
+		return "%s — %s ?" % [designation, contact_classification_label]
+	return "%s — %s" % [designation, contact_classification_label]
 
 
 func contains_world_point(world_point: Vector2) -> bool:
@@ -820,7 +862,11 @@ func _update_automatic_thermal_mode(delta: float) -> void:
 	combat_alert_remaining = maxf(0.0, combat_alert_remaining - delta)
 	if combat_alert_remaining > 0.0:
 		thermal_mode = ThermalMode.COMBAT
-	elif has_move_target or velocity.length() > stationary_speed_threshold:
+	elif (
+		sensor_mode == SensorMode.ACTIVE
+		or has_move_target
+		or velocity.length() > stationary_speed_threshold
+	):
 		thermal_mode = ThermalMode.NORMAL
 	else:
 		thermal_mode = ThermalMode.SILENT
@@ -837,6 +883,10 @@ func get_thermal_signature() -> float:
 	elif thermal_mode == ThermalMode.COMBAT:
 		radiator_signature = combat_radiator_signature
 	return maxf(0.1, baseline_thermal_signature + get_heat_ratio() * stored_heat_signature_multiplier + engine_signature_activity * engine_signature_multiplier + radiator_signature)
+
+
+func get_passive_detection_signature() -> float:
+	return maxf(minimum_passive_signature, get_thermal_signature())
 
 
 func is_weapons_overheated() -> bool:
@@ -892,6 +942,11 @@ func mark_point_defense_fired(aim_point: Vector2) -> void:
 func _physics_process(delta: float) -> void:
 	_update_automatic_thermal_mode(delta)
 	_update_thermal_state(delta)
+	if intel_state == IntelState.SIGNAL:
+		contact_pulse_elapsed = fposmod(
+			contact_pulse_elapsed + delta,
+			TacticalPresentation.CONTACT_PULSE_PERIOD
+		)
 	if impact_flash_remaining > 0.0:
 		impact_flash_remaining = maxf(0.0, impact_flash_remaining - delta)
 		queue_redraw()
@@ -918,6 +973,8 @@ func _physics_process(delta: float) -> void:
 		has_move_target = false
 		navigation_route.clear()
 		is_orienting_to_final_heading = false
+		if intel_state == IntelState.SIGNAL:
+			queue_redraw()
 		return
 
 	if has_move_target:
@@ -1137,17 +1194,43 @@ func _draw() -> void:
 		)
 	if team_id != 0 and intel_state == IntelState.SIGNAL:
 		var signal_radius: float = maxf(13.0, symbol_radius)
-		_draw_contact_uncertainty(contact_offset, signal_radius, important_stroke)
-		draw_circle(contact_offset, signal_radius, Color(1.0, 0.74, 0.28, 0.10))
-		var signal_segments: int = TacticalPresentation.circle_segments(signal_radius, visual_zoom)
-		draw_arc(contact_offset, signal_radius, -PI * 0.35, PI * 1.35, signal_segments, halo_color, halo_stroke)
-		draw_arc(contact_offset, signal_radius, -PI * 0.35, PI * 1.35, signal_segments, Color("ffbd48"), important_stroke)
-		var reticle_half: float = maxf(5.0, TacticalPresentation.world_size_for_screen_pixels(3.0, visual_zoom))
-		draw_line(contact_offset + Vector2(-reticle_half, 0.0), contact_offset + Vector2(reticle_half, 0.0), Color("ffbd48"), important_stroke)
+		var blip_radius: float = maxf(
+			signal_radius * 0.18,
+			TacticalPresentation.world_size_for_screen_pixels(2.0, visual_zoom)
+		)
+		var phase_offset: float = float(posmod(callsign.hash(), 997)) / 997.0
+		var pulse_phase: float = TacticalPresentation.contact_pulse_phase(
+			contact_pulse_elapsed,
+			phase_offset
+		)
+		var pulse_minimum: float = maxf(
+			blip_radius * 1.8,
+			TacticalPresentation.world_size_for_screen_pixels(4.0, visual_zoom)
+		)
+		var pulse_maximum: float = maxf(
+			pulse_minimum + TacticalPresentation.world_size_for_screen_pixels(6.0, visual_zoom),
+			minf(contact_uncertainty_radius, 240.0)
+		)
+		var pulse_radius: float = TacticalPresentation.contact_pulse_radius(
+			pulse_minimum,
+			pulse_maximum,
+			pulse_phase
+		)
+		var pulse_alpha: float = TacticalPresentation.contact_pulse_alpha(pulse_phase)
+		draw_circle(contact_offset, blip_radius * 1.8, halo_color)
+		draw_circle(contact_offset, blip_radius, Color("ffbd48"))
+		draw_arc(
+			contact_offset,
+			pulse_radius,
+			0.0,
+			TAU,
+			TacticalPresentation.circle_segments(pulse_radius, visual_zoom),
+			Color(1.0, 0.74, 0.28, 0.86 * pulse_alpha),
+			important_stroke
+		)
 		return
 	if team_id != 0 and intel_state == IntelState.TRACKED:
 		var tracked_center: Vector2 = contact_offset
-		_draw_contact_uncertainty(tracked_center, symbol_radius, important_stroke)
 		var tracked_shape := PackedVector2Array([
 			tracked_center + Vector2(0.0, -symbol_radius), tracked_center + Vector2(symbol_radius, 0.0),
 			tracked_center + Vector2(0.0, symbol_radius), tracked_center + Vector2(-symbol_radius, 0.0),
@@ -1157,7 +1240,7 @@ func _draw() -> void:
 		_draw_impact_flash()
 		return
 
-	var forward := Vector2(0.0, -symbol_radius * 1.45)
+	var forward := Vector2(0.0, -symbol_radius * IDENTIFIED_SYMBOL_EXTENT_MULTIPLIER)
 	var left := Vector2(-symbol_radius, symbol_radius)
 	var right := Vector2(symbol_radius, symbol_radius)
 	if team_id == 0:
@@ -1282,25 +1365,6 @@ func _weapon_arc_color(system: WeaponSystemProfile, alpha_boost: float) -> Color
 			if system.tactical_role == WeaponSystemProfile.TacticalRole.ANTI_RADIATION:
 				return Color(1.0, 0.35, 0.82, 0.32 * alpha_boost)
 	return Color(1.0, 0.72, 0.30, 0.28 * alpha_boost)
-
-
-func _draw_contact_uncertainty(center: Vector2, symbol_radius: float, stroke: float) -> void:
-	if contact_uncertainty_radius <= symbol_radius * 1.5:
-		return
-	var radius: float = minf(contact_uncertainty_radius, 240.0)
-	var bracket_half_angle: float = 0.18
-	var segments: int = TacticalPresentation.circle_segments(radius, visual_zoom)
-	var uncertainty_color := Color(1.0, 0.68, 0.30, 0.30)
-	for cardinal_angle: float in [0.0, PI * 0.5, PI, PI * 1.5]:
-		draw_arc(
-			center,
-			radius,
-			cardinal_angle - bracket_half_angle,
-			cardinal_angle + bracket_half_angle,
-			segments,
-			uncertainty_color,
-			stroke
-		)
 
 
 func _draw_launcher_status(alpha: float = 1.0) -> void:

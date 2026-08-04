@@ -15,6 +15,12 @@ enum Channel {
 	TRIANGULATED = 8,
 }
 
+enum Classification {
+	UNKNOWN,
+	ESTIMATED,
+	CONFIRMED,
+}
+
 const SIGNAL_CONFIDENCE: float = 0.30
 const TRACKED_CONFIDENCE: float = 0.72
 const IDENTIFIED_CONFIDENCE: float = 1.0
@@ -34,7 +40,9 @@ var observation_floor: float = 0.0
 var seconds_since_any_observation: float = INF
 var seconds_since_kinematic_observation: float = INF
 var assumed_target_acceleration: float = 20.0
-var classification_locked: bool = false
+var classification_state: Classification = Classification.UNKNOWN
+var classification_label: String = ""
+var designation: String = ""
 var last_observation_channels: int = 0
 var bearing_observer_count: int = 0
 var triangulation_quality: float = 0.0
@@ -60,7 +68,9 @@ func observe(
 	observation_channels: int = 0,
 	observer_count: int = 1,
 	new_triangulation_quality: float = 0.0,
-	observation_source_ids: Array = []
+	observation_source_ids: Array = [],
+	observed_classification: Classification = Classification.UNKNOWN,
+	observed_classification_label: String = ""
 ) -> void:
 	var observation_confidence: float = _confidence_for_state(observed_state)
 	observation_floor = maxf(observation_floor, observation_confidence)
@@ -70,6 +80,11 @@ func observe(
 	bearing_observer_count = maxi(1, observer_count)
 	triangulation_quality = clampf(new_triangulation_quality, 0.0, 1.0)
 	last_observation_source_ids.assign(observation_source_ids)
+	if observed_classification > classification_state:
+		classification_state = observed_classification
+		classification_label = observed_classification_label
+	elif observed_classification == classification_state and not observed_classification_label.is_empty():
+		classification_label = observed_classification_label
 	if observed_state >= State.TRACKED:
 		estimated_position = observed_position
 		estimated_velocity = observed_velocity
@@ -80,8 +95,22 @@ func observe(
 		estimated_velocity = Vector2.ZERO
 		uncertainty_radius = maxf(1.0, base_uncertainty)
 		seconds_since_kinematic_observation = 0.0
+
+
+func get_classification_display() -> String:
+	if classification_state == Classification.UNKNOWN or classification_label.is_empty():
+		return ""
+	if classification_state == Classification.ESTIMATED:
+		return "%s ?" % classification_label
+	return classification_label
+
+
+static func classification_for_observation(observed_state: State, channels: int) -> Classification:
 	if observed_state == State.IDENTIFIED:
-		classification_locked = true
+		return Classification.CONFIRMED
+	if observed_state >= State.TRACKED or bool(channels & Channel.RADIO):
+		return Classification.ESTIMATED
+	return Classification.UNKNOWN
 
 
 func advance(delta: float) -> void:

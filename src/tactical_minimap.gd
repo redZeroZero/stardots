@@ -2,7 +2,7 @@ class_name TacticalMinimap
 extends Control
 
 var tactical_root: Node
-var world_rect: Rect2 = Rect2(-4096.0, -4096.0, 8192.0, 8192.0)
+var world_rect: Rect2 = Rect2(-6144.0, -6144.0, 12288.0, 12288.0)
 var camera_drag_button: MouseButton = MOUSE_BUTTON_NONE
 
 
@@ -113,7 +113,12 @@ func _draw_engagement_envelopes() -> void:
 		return
 	for group: Dictionary in tactical_root.tactical_overlay.engagement_groups:
 		_draw_minimap_coverage(
-			group.sensor,
+			group.active_sensor,
+			Color(1.0, 0.42, 0.88, 0.018),
+			Color(1.0, 0.42, 0.88, 0.68)
+		)
+		_draw_minimap_coverage(
+			group.passive_sensor,
 			Color(0.25, 0.82, 1.0, 0.025),
 			Color(0.35, 0.85, 1.0, 0.62)
 		)

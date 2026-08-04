@@ -50,8 +50,10 @@ tir ou un guidage missile. Un AWACS peut relier les groupes et leur transmettre
 des rapports de piste synthétiques, légèrement moins précis que la piste source.
 L'affectation au groupe est conservée par `REJOUER` et `DÉPLOIEMENT`.
 
-La détection commence par comparer les enveloppes spatiales des groupes. Les
-bâtiments de deux régions trop éloignées ne sont jamais comparés individuellement.
+La détection commence par comparer les enveloppes spatiales des groupes. La
+portée passive nominale garantit la détection d'une coque ordinaire ; sa chaleur
+peut l'étendre, tandis qu'une furtivité future devra être un mécanisme explicite.
+Les bâtiments de deux régions trop éloignées ne sont jamais comparés individuellement.
 Dans une région active, les observations sont condensées directement par groupe
 et par cible avant la fusion. Le benchmark dédié se lance avec :
 
@@ -92,8 +94,9 @@ fixes et indestructibles. Les unités sont sélectionnées au départ ; `A`, pui
 un clic pose une mission de feu de rayon `180`. Elle attend indéfiniment un
 contact, une piste, une liaison, une portée et un arc valides, tire une fois,
 puis se termine sans déplacer les bâtiments. Une sélection multiple affiche la
-veille nominale partagée en cyan et l'enveloppe orange des armes offensives
-autorisées par `W`. Une sélection unique restaure automatiquement les capteurs,
+veille passive partagée en cyan, l'extension des radars actuellement actifs en
+magenta et l'enveloppe orange des armes offensives autorisées par `W`. Une
+sélection unique restaure automatiquement les capteurs,
 la liaison, les portées minimales et les arcs précis du bâtiment. `V` force ces
 détails pour tout un groupe en mode debug.
 
@@ -158,16 +161,37 @@ partagées et son indicateur affiche réellement `SILENCE`. Les groupes continue
 néanmoins une approche préplanifiée : perdre la liaison retire l'actualisation
 tactique, pas le plan de mission déjà distribué.
 
-Pour observer la dégradation d'une piste après sa sortie de détection :
+Pour tester les blips incertains puis l'apparition d'une solution de tir :
 
 ```bash
 ./scripts/godot --path . -- --sensor-demo
 ```
 
-`CONTACT-01` quitte automatiquement la portée de `SENSOR-01`. Sa dernière
-position est propagée selon son vecteur connu, les quatre crochets orange
-montrent l'incertitude croissante, puis la piste devient signal avant de
-disparaître.
+`SENSOR-01` et `TIREUR-01` sont sélectionnés face à quatre plastrons fixes et
+indestructibles placés dans la couronne de détection imprécise. Ils apparaissent
+d'abord comme des blips. Donnez un ordre de rapprochement au groupe avec le clic
+droit : les contacts deviennent des losanges, puis reçoivent des crochets verts
+quand la frégate possède une solution de tir. `A`, puis un clic sur la formation,
+permet alors de lancer ses missiles moyens.
+
+Chaque piste hostile reçoit une désignation stable telle que `BANDIT-01`.
+La qualité de localisation et la connaissance du type sont indépendantes :
+`BANDIT-01` reste non classifié, `BANDIT-01 — FRÉGATE ?` indique une estimation
+et `BANDIT-01 — FRÉGATE` une classification confirmée. Le blip, le losange et
+les crochets verts continuent d'indiquer séparément la qualité cinématique et
+la possibilité réelle de tirer.
+
+Pour visualiser directement l'effet de la chaleur sur la veille passive :
+
+```bash
+./scripts/godot --path . -- --thermal-demo
+```
+
+Le radar actif montre d'abord deux coques identiques placées au-delà du cercle
+passif cyan. Pressez `S` : la cible froide vieillit puis disparaît, tandis que la
+cible chaude reste identifiée par l'infrarouge. Le bandeau affiche en continu
+leur signature IR et la portée passive effective correspondante. La cible chaude
+refroidit normalement ; elle finit donc elle aussi par sortir de la veille.
 
 Dans `--ai-demo`, sélectionnez `EYE-BLEU` pour suivre son émission automatique :
 silence radio, partage de pistes, puis conduite de tir selon les contacts et les

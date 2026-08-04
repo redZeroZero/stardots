@@ -3,8 +3,10 @@ extends Node2D
 
 const EngagementEnvelopeLogic := preload("res://src/presentation/engagement_envelope.gd")
 const ENVELOPE_REFRESH_INTERVAL: float = 0.20
-const SENSOR_FILL := Color(0.25, 0.82, 1.0, 0.018)
-const SENSOR_BORDER := Color(0.35, 0.85, 1.0, 0.52)
+const PASSIVE_SENSOR_FILL := Color(0.25, 0.82, 1.0, 0.014)
+const PASSIVE_SENSOR_BORDER := Color(0.35, 0.85, 1.0, 0.58)
+const ACTIVE_SENSOR_FILL := Color(1.0, 0.42, 0.88, 0.010)
+const ACTIVE_SENSOR_BORDER := Color(1.0, 0.42, 0.88, 0.62)
 const WEAPON_FILL := Color(1.0, 0.55, 0.22, 0.028)
 const WEAPON_BORDER := Color(1.0, 0.68, 0.30, 0.72)
 const FIRE_CONTROL_COLOR := Color(0.55, 1.0, 0.62, 0.92)
@@ -86,15 +88,25 @@ func _rebuild_engagement_groups() -> void:
 		var sensor_units: Array = group_units.filter(
 			func(unit): return tactical_root.unit_contributes_sensor_to_group(unit, group_id)
 		)
-		var sensor_coverage: Dictionary = engagement_envelope.build_sensor_coverage(sensor_units)
+		var passive_sensor_coverage: Dictionary = (
+			engagement_envelope.build_passive_sensor_coverage(sensor_units)
+		)
+		var active_sensor_coverage: Dictionary = (
+			engagement_envelope.build_active_sensor_coverage(sensor_units)
+		)
 		var weapon_coverage: Dictionary = engagement_envelope.build_weapon_coverage(
 			group_units,
 			tactical_root.is_weapon_system_selected_for_overlay
 		)
-		if not sensor_coverage.contours.is_empty() or not weapon_coverage.contours.is_empty():
+		if (
+			not passive_sensor_coverage.contours.is_empty()
+			or not active_sensor_coverage.contours.is_empty()
+			or not weapon_coverage.contours.is_empty()
+		):
 			engagement_groups.append({
 				"group_id": group_id,
-				"sensor": sensor_coverage,
+				"passive_sensor": passive_sensor_coverage,
+				"active_sensor": active_sensor_coverage,
 				"weapon": weapon_coverage,
 			})
 
@@ -103,7 +115,18 @@ func _draw_engagement_envelopes(zoom_value: float) -> void:
 	var sensor_width: float = TacticalPresentation.stroke_width(1.2, zoom_value)
 	var weapon_width: float = TacticalPresentation.stroke_width(1.7, zoom_value)
 	for group: Dictionary in engagement_groups:
-		_draw_coverage(group.sensor, SENSOR_FILL, SENSOR_BORDER, sensor_width)
+		_draw_coverage(
+			group.active_sensor,
+			ACTIVE_SENSOR_FILL,
+			ACTIVE_SENSOR_BORDER,
+			sensor_width
+		)
+		_draw_coverage(
+			group.passive_sensor,
+			PASSIVE_SENSOR_FILL,
+			PASSIVE_SENSOR_BORDER,
+			sensor_width
+		)
 		_draw_coverage(group.weapon, WEAPON_FILL, WEAPON_BORDER, weapon_width)
 
 
@@ -124,8 +147,10 @@ func _draw_coverage(coverage: Dictionary, fill: Color, border: Color, width: flo
 func _draw_fire_control_markers(zoom_value: float) -> void:
 	if tactical_root.selected_units.is_empty() or tactical_root.range_debug_enabled:
 		return
-	var marker_radius: float = TacticalPresentation.world_size_for_screen_pixels(8.0, zoom_value)
-	var corner_length: float = marker_radius * 0.42
+	var corner_length: float = TacticalPresentation.world_size_for_screen_pixels(
+		TacticalPresentation.FIRE_CONTROL_CORNER_LENGTH_PX,
+		zoom_value
+	)
 	var width: float = TacticalPresentation.stroke_width(1.6, zoom_value)
 	for target in tactical_root.enemy_units:
 		if (
@@ -136,6 +161,16 @@ func _draw_fire_control_markers(zoom_value: float) -> void:
 		):
 			continue
 		var center: Vector2 = tactical_root._get_contact_position(0, target)
+		var extent_multiplier: float = (
+			TacticalUnit.IDENTIFIED_SYMBOL_EXTENT_MULTIPLIER
+			if target.intel_state == TacticalUnit.IntelState.IDENTIFIED
+			else 1.0
+		)
+		var marker_radius: float = TacticalPresentation.fire_control_marker_radius(
+			TacticalUnit.BODY_RADIUS,
+			extent_multiplier,
+			zoom_value
+		)
 		for diagonal: Vector2 in [Vector2(-1.0, -1.0), Vector2(1.0, -1.0), Vector2(1.0, 1.0), Vector2(-1.0, 1.0)]:
 			var corner: Vector2 = center + diagonal * marker_radius
 			draw_line(corner, corner - Vector2(diagonal.x, 0.0) * corner_length, FIRE_CONTROL_COLOR, width)

@@ -13,6 +13,8 @@ func _run() -> void:
 	var failures: Array[String] = []
 	var initial_heat: float = unit.heat
 	var initial_signature: float = unit.get_thermal_signature()
+	if unit.get_passive_detection_signature() < 1.0:
+		failures.append("une signature ordinaire passe sous la garantie passive nominale")
 
 	unit.set_move_target(Vector2(500.0, 0.0))
 	for frame: int in 120:

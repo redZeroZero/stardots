@@ -145,7 +145,7 @@ func _validate_blue_fleet(units: Array[TacticalUnit], failures: Array[String]) -
 		if unit.provides_fire_control_data():
 			has_awacs = true
 		if unit.unit_profile.tactical_role == "CELLULES LONGUE PORTÉE" and (
-			unit.active_sensor_range != 560.0 or unit.can_transmit_data()
+			unit.active_sensor_range != 1008.0 or unit.can_transmit_data()
 		):
 			failures.append("un arsenal bleu ne conserve pas sa dépendance au réseau")
 		for system: WeaponSystemProfile in unit.weapon_system_profiles:

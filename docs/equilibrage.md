@@ -71,9 +71,26 @@ une sécurité bloque temporairement les armes jusqu'au refroidissement.
 La barre fine sous la barre de coque représente la chaleur, du bleu vers le
 rouge. L'inspecteur affiche également la valeur et la signature infrarouge.
 Cette signature augmente avec la chaleur stockée et connaît un pic pendant une
-poussée. La portée effective des capteurs passifs dépend désormais de la
-signature de leur cible : une dérive froide est discrète, une manœuvre propulsée
-est beaucoup plus facile à suivre.
+poussée. Pour une coque ordinaire, elle ne réduit jamais la détection sous la
+portée passive nominale : entrer dans cette enveloppe garantit donc la
+détection. Une manœuvre propulsée ou une coque chaude reste visible au-delà. Un
+futur mécanisme de furtivité explicite pourra abaisser ce plancher profil par
+profil sans rendre les bâtiments normaux intermittents.
+
+La démo `--thermal-demo` matérialise cette relation avec deux coques identiques
+placées au-delà de la portée nominale. Le bandeau affiche `portée = portée
+nominale × signature IR` ; après passage du veilleur en passif avec `S`, seule
+la coque chaude reste observée, puis elle disparaît naturellement en
+refroidissant.
+
+Constat du `4 août 2026` : l'amplitude actuelle est insuffisante. Le passage de
+`630` à environ `850` pour une coque très chaude ne procure qu'environ `1,2 s`
+d'alerte à une vitesse de fermeture de `190 unités/s`. À la prochaine séance,
+tester une courbe nettement plus expressive : `×1,0` au régime normal, jusqu'à
+`×2,0` pour la chaleur stockée et une pointe proche de `×2,5` sous forte poussée
+ou radiateurs de combat. Ces valeurs restent une hypothèse de test, pas un
+équilibrage final. Ne modifier aucun autre rapport de vitesse, portée ou taille
+de théâtre pendant cet essai.
 
 ## Contrôle des systèmes
 
@@ -83,17 +100,18 @@ est beaucoup plus facile à suivre.
 
 Le capteur actif porte plus loin et produit directement une piste exploitable,
 mais son émission peut être détectée à plus grande distance et génère de la
-chaleur. À l'arrêt, le calculateur adopte le régime silencieux afin de réduire le
-rayonnement. Un ordre de poussée ou une dérive significative impose le régime
-normal. Un lancement de missile, une menace missile entrante, un tir PDC ou un
-impact déclenche immédiatement le régime combat : le refroidissement est maximal,
-au prix d'une forte signature de radiateur. Après `6 s` sans menace pour une
-frégate (`7 s` pour l'AWACS), le régime adapté au mouvement revient seul.
+chaleur. À l'arrêt et en veille passive, le calculateur adopte le régime
+silencieux afin de réduire le rayonnement. Un radar actif, un ordre de poussée
+ou une dérive significative impose le régime normal. Un lancement de missile,
+une menace missile entrante, un tir PDC ou un impact déclenche immédiatement le
+régime combat : le refroidissement est maximal, au prix d'une forte signature
+de radiateur. Après `6 s` sans menace pour une frégate (`7 s` pour l'AWACS), le
+régime adapté aux systèmes et au mouvement revient seul.
 
 ## Carte stratégique et minimap
 
 La molette permet maintenant de dézoomer jusqu'à une vue presque complète du
-théâtre de `8192 × 8192`. La caméra reste bornée à cette zone. La minimap en haut
+théâtre de `12288 × 12288`. La caméra reste bornée à cette zone. La minimap en haut
 à droite affiche les bâtiments amis, le cadre de caméra et uniquement les
 contacts ennemis connus, avec une couleur dépendant de leur niveau de
 renseignement. Un clic gauche sur la minimap déplace la caméra.
@@ -110,7 +128,7 @@ le glisser continu fonctionne avec le bouton gauche ou droit. Les contrôles de
 l'interface neutralisent le défilement par contact avec le bord afin d'éviter
 que les deux gestes se cumulent.
 
-Le rectangle de `8192 × 8192` est maintenant bordé d'un liseré cyan et d'une
+Le rectangle de `12288 × 12288` est maintenant bordé d'un liseré cyan et d'une
 bande intérieure translucide : il représente la limite opérationnelle du
 théâtre, pas une paroi physique pour les vaisseaux. La caméra y est strictement
 bornée. Lorsqu'un bâtiment franchit la limite, son calculateur remplace sa route
@@ -135,7 +153,7 @@ Le scénario de test oppose désormais `EYE-01` et deux frégates bleues à troi
 bandits rouges, avec environ `2600` unités entre l'AWACS et les contacts initiaux.
 `EYE-01` est un bâtiment AWACS sans tube ni munition missile : il conserve
 seulement une défense PDC cinétique de courte portée. Ses portées de détection
-sont de `2800` en passif, `4000` en actif et `5000` contre une émission active.
+sont de `2520` en passif, `6000` en actif et `5000` contre une émission active.
 
 Une piste détectée par l'AWACS devient une solution de tir pour un lanceur allié
 si celui-ci se trouve dans sa bulle de liaison de `1800`. La piste tactique peut
@@ -256,11 +274,12 @@ rétrograde d'identification à piste, puis signal, avant de disparaître. Une
 incertitude supérieure à `45` unités ne constitue plus une solution de tir.
 
 Les symboles de piste et de signal sont placés sur la position estimée plutôt
-que sur la position réelle. Quatre crochets orange indiquent sobrement
-l'incertitude croissante. Railguns et missiles reçoivent également cette
-position estimée ; un missile conserve la dernière information partagée jusqu'à
-son éventuelle acquisition terminale. Le scénario `--sensor-demo` permet
-d'observer toute la dégradation sur un contact sortant.
+que sur la position réelle. Un signal utilise uniquement son blip pulsant et une
+piste uniquement son losange orange : aucun halo ou crochet orange supplémentaire
+ne se superpose. Railguns et missiles reçoivent également cette position estimée ;
+un missile conserve la dernière information partagée jusqu'à son éventuelle
+acquisition terminale. Le scénario `--sensor-demo` permet de comparer ces états
+sur une formation fixe puis de provoquer une solution de tir par rapprochement.
 
 La passe à `5 Hz` traite les deux camps simultanément : la distance d'une paire
 bleu/rouge n'est calculée qu'une fois, puis sert aux deux directions de
@@ -280,9 +299,9 @@ piste, avec une incertitude qui diminue lorsque la géométrie s'améliore. Le
 bandeau résume ces origines par `TRI` et `EM`, sans ajouter de nouveaux anneaux ;
 la fiche d'une unité sélectionnée affiche son niveau et son régime d'émission.
 
-La frégate généraliste utilise désormais une veille passive de `700`, un radar
-actif de `1000` et une détection d'émissions de `1400`. Avec les seuils actuels,
-son radar produit une piste jusqu'à `680` et une identification jusqu'à `360` :
+La frégate généraliste utilise désormais une veille passive garantie de `630`,
+un radar actif de `1800` et une détection d'émissions de `1400`. Avec les seuils
+actuels, son radar produit une piste jusqu'à `1224` et une identification jusqu'à `648` :
 elle peut donc opérer seule à portée réduite sans exploiter automatiquement les
 `900` unités de ses missiles moyens. Sa liaison standard est un transceiver de
 `1200` sans capacité de relais ni conduite de tir dédiée. Deux frégates reliées
@@ -290,8 +309,8 @@ peuvent partager la piste précise produite par l'une d'elles, mais ne peuvent p
 propager une piste reçue vers un troisième saut.
 
 Le porte-missiles longue portée constitue l'exception volontairement dépendante
-du réseau. Il conserve `420` en passif, `560` en actif, `720` contre les émissions
-et une liaison de réception seule. L'AWACS reste inchangé à `2800/4000/5000` et
+du réseau. Il conserve `378` en passif, `1008` en actif, `720` contre les émissions
+et une liaison de réception seule. L'AWACS utilise `2520/6000/5000` et
 demeure nécessaire pour exploiter les engagements profonds et relayer la flotte.
 
 ### Piste de conception — classification et illumination directionnelle
@@ -302,12 +321,21 @@ détection passive devrait révéler rapidement le rôle ou la classe du contact
 tout en conservant une position incertaine. Le joueur pourrait ainsi reconnaître
 un AWACS ou un arsenal sans disposer immédiatement d'une solution de tir.
 
-La visualisation envisagée conserve la silhouette ou un pictogramme de classe
-dès la détection, puis représente séparément la qualité de localisation : signal
-jaune diffus, piste orange stable et crochets verts pour la conduite de tir. Le
-radar actif ne serait donc plus l'unique clef d'identification ; il servirait à
-détecter les plateformes froides, réduire rapidement l'incertitude et produire
-une solution de tir au prix d'une émission repérable.
+Le premier socle est implémenté : chaque piste de commandement reçoit une
+désignation `BANDIT-XX` stable pendant sa durée de vie. La classification possède
+désormais ses propres états `INCONNU`, `ESTIMÉ` et `CONFIRMÉ`, transmis dans les
+rapports de groupe sans modifier la confiance cinématique ni l'incertitude. Un
+simple signal radio reste non classifié ou estimé selon sa qualité. Une cible
+dans la portée thermique passive effective est directement identifiée et
+affichée comme vaisseau ; l'observation active rapprochée produit le même niveau
+de connaissance. Les profils d'unité exposent séparément leur classe capteur.
+
+La visualisation utilise trois représentations exclusives : blip jaune-orangé
+pour un signal, losange orange stable pour une piste et silhouette complète pour
+une identification. Les crochets verts de conduite de tir restent temporairement
+affichés en permanence afin d'évaluer leur utilité. Leur marge demeure constante
+en pixels autour du symbole à tous les zooms, y compris lorsque la coque grandit
+en vue rapprochée.
 
 Pour un bâtiment non spécialisé, le radar actif devrait probablement être
 directionnel. Son secteur suivrait l'orientation du bâtiment ou une direction
@@ -341,11 +369,12 @@ portée, de piste ou de disponibilité.
 ### Enveloppe d'engagement agrégée
 
 En sélection multiple, chaque groupe partageant le même fournisseur de conduite
-de tir affiche deux contours : la veille nominale cyan et l'engagement orange.
-La veille réunit uniquement les capteurs capables de transmettre leurs propres
-observations au groupe. L'engagement exclut PDC et intercepteurs, puis suit le
-filtre `W` : toutes les armes offensives en `AUTO`, antinavires, railgun ou
-antirayonnement. Une perte de liaison sépare immédiatement les îlots.
+de tir affiche trois contours : la veille passive garantie en cyan, l'extension
+des radars actuellement actifs en magenta et l'engagement orange. Chaque
+enveloppe capteur réunit uniquement les bâtiments capables de transmettre leurs
+propres observations au groupe. L'engagement exclut PDC et intercepteurs, puis
+suit le filtre `W` : toutes les armes offensives en `AUTO`, antinavires, railgun
+ou antirayonnement. Une perte de liaison sépare immédiatement les îlots.
 
 Une sélection unique restaure automatiquement le détail technique : capteur
 passif, radar actif, liaison, portée minimale, secteur de montage et cap de

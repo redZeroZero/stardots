@@ -9,6 +9,7 @@
 [resource]
 script = ExtResource("1_profile")
 display_name = "Frégate lance-missiles"
+classification_label = "FRÉGATE"
 tactical_role = "FRÉGATE"
 crewed = true
 propulsion_profile = ExtResource("2_propulsion")
@@ -22,11 +23,13 @@ arrival_radius = 5.0
 station_keeping_speed = 8.0
 preferred_turn_radius = 90.0
 turn_anticipation = 0.75
-sensor_range = 700.0
-active_sensor_range = 1000.0
+sensor_range = 630.0
+active_sensor_range = 1800.0
 active_emission_detection_range = 1400.0
-active_sensor_heat_per_second = 4.0
+active_sensor_heat_per_second = 3.0
+minimum_passive_signature = 1.0
 data_link_profile = ExtResource("5_link")
+active_radar_emission_strength = 2.0
 heat_capacity = 100.0
 initial_heat = 20.0
 passive_cooling_per_second = 2.5

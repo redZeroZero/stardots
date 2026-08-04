@@ -40,8 +40,10 @@ func _run() -> void:
 		failures.append("les zones des bâtiments reliés à l'AWACS ne forment pas une enveloppe commune")
 	else:
 		var common_group: Dictionary = battlefield.tactical_overlay.engagement_groups[0]
-		if common_group.sensor.contours.is_empty():
+		if common_group.passive_sensor.contours.is_empty():
 			failures.append("la sélection multiple ne produit pas de veille nominale commune")
+		if not common_group.active_sensor.contours.is_empty():
+			failures.append("une flotte en veille passive affiche une enveloppe active")
 		if common_group.weapon.sources.size() != 3:
 			failures.append("la vue AUTO ne conserve pas les trois armements offensifs disponibles")
 	if battlefield.tactical_overlay.fire_control_target_ids.is_empty():

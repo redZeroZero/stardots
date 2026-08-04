@@ -19,20 +19,30 @@ func build_weapon_coverage(units: Array, system_filter: Callable) -> Dictionary:
 	return _build_result(valid_units.size(), sectors)
 
 
-func build_sensor_coverage(units: Array) -> Dictionary:
+func build_passive_sensor_coverage(units: Array) -> Dictionary:
 	var valid_units: Array = units.filter(
 		func(unit): return is_instance_valid(unit) and not unit.destroyed
 	)
 	var sectors: Array[PackedVector2Array] = []
 	for unit in valid_units:
-		var nominal_range: float = (
-			unit.active_sensor_range
-			if unit.sensor_mode == TacticalUnit.SensorMode.ACTIVE
-			else unit.sensor_range
-		)
-		if nominal_range > 0.0:
-			sectors.append(_build_sector(unit, nominal_range, null))
+		if unit.sensor_range > 0.0:
+			sectors.append(_build_sector(unit, unit.sensor_range, null))
 	return _build_result(valid_units.size(), sectors)
+
+
+func build_active_sensor_coverage(units: Array) -> Dictionary:
+	var active_units: Array = units.filter(
+		func(unit): return (
+			is_instance_valid(unit)
+			and not unit.destroyed
+			and unit.sensor_mode == TacticalUnit.SensorMode.ACTIVE
+			and unit.active_sensor_range > 0.0
+		)
+	)
+	var sectors: Array[PackedVector2Array] = []
+	for unit in active_units:
+		sectors.append(_build_sector(unit, unit.active_sensor_range, null))
+	return _build_result(active_units.size(), sectors)
 
 
 func _build_unit_weapon_sectors(unit, system_filter: Callable) -> Array[PackedVector2Array]:

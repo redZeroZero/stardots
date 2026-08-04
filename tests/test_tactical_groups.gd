@@ -21,6 +21,9 @@ func _run() -> void:
 	profile.weapon_system_profiles = []
 	profile.missile_capacity = 0
 	profile.missile_launcher_count = 0
+	profile.sensor_range = 100.0
+	profile.active_emission_detection_range = 600.0
+	profile.active_radar_emission_strength = 1.0
 	var first: TacticalUnit = battle._spawn_unit(
 		"GROUPE-1", 0, Vector2(-500.0, -100.0), profile
 	)
@@ -32,6 +35,7 @@ func _run() -> void:
 	second.tactical_group_id = 1
 	first.sensor_mode = TacticalUnit.SensorMode.PASSIVE
 	second.sensor_mode = TacticalUnit.SensorMode.PASSIVE
+	target.sensor_mode = TacticalUnit.SensorMode.ACTIVE
 	battle._update_sensor_picture()
 
 	var command_track = battle._get_sensor_track(0, target)
@@ -72,6 +76,11 @@ func _run() -> void:
 		or not battle._launcher_has_fire_control_solution(second, target)
 	):
 		failures.append("le bâtiment de commandement ne remonte pas une piste synthétique exploitable")
+	elif (
+		second_track.classification_state != SENSOR_TRACK_SCRIPT.Classification.CONFIRMED
+		or second_track.classification_label != "FRÉGATE"
+	):
+		failures.append("le rapport de commandement ne transmet pas le type confirmé")
 	battle._update_missile_guidance()
 	if not missile.external_guidance_available:
 		failures.append("le guidage ne reprend pas après la fusion intergroupes du commandement")

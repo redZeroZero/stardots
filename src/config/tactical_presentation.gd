@@ -19,6 +19,9 @@ const MAXIMUM_STROKE_PX: float = 3.0
 const CLOSE_GRID_SPACING: float = 64.0
 const TACTICAL_GRID_SPACING: float = 256.0
 const STRATEGIC_GRID_SPACING: float = 1024.0
+const CONTACT_PULSE_PERIOD: float = 1.5
+const FIRE_CONTROL_MARKER_PADDING_PX: float = 4.0
+const FIRE_CONTROL_CORNER_LENGTH_PX: float = 4.0
 
 
 static func detail_level(zoom: float) -> DetailLevel:
@@ -57,6 +60,35 @@ static func stroke_width(base_world_width: float, zoom: float, minimum_px: float
 static func circle_segments(world_radius: float, zoom: float) -> int:
 	var apparent_circumference: float = TAU * world_radius * maxf(zoom, 0.001)
 	return clampi(ceili(apparent_circumference / 10.0), 16, 128)
+
+
+static func contact_pulse_phase(elapsed_seconds: float, phase_offset: float = 0.0) -> float:
+	return fposmod(elapsed_seconds / CONTACT_PULSE_PERIOD + phase_offset, 1.0)
+
+
+static func contact_pulse_radius(minimum_radius: float, maximum_radius: float, phase: float) -> float:
+	var safe_phase: float = clampf(phase, 0.0, 1.0)
+	return lerpf(minimum_radius, maxf(minimum_radius, maximum_radius), smoothstep(0.0, 1.0, safe_phase))
+
+
+static func contact_pulse_alpha(phase: float) -> float:
+	return 1.0 - smoothstep(0.12, 1.0, clampf(phase, 0.0, 1.0))
+
+
+static func fire_control_marker_radius(
+	base_symbol_radius: float,
+	extent_multiplier: float,
+	zoom: float
+) -> float:
+	var symbol_radius: float = compensated_radius(
+		base_symbol_radius,
+		MINIMUM_UNIT_DIAMETER_PX,
+		zoom
+	)
+	return (
+		symbol_radius * maxf(1.0, extent_multiplier)
+		+ world_size_for_screen_pixels(FIRE_CONTROL_MARKER_PADDING_PX, zoom)
+	)
 
 
 static func local_direction_for_world_heading(world_heading: float, node_rotation: float) -> Vector2:

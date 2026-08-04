@@ -43,7 +43,7 @@ func _init(size: int) -> void:
 
 
 func capture_target(index: int, target: TacticalUnit) -> void:
-	var signature: float = target.get_thermal_signature()
+	var signature: float = target.get_passive_detection_signature()
 	var emission: float = target.get_electromagnetic_signature()
 	signatures[index] = signature
 	emissions[index] = emission

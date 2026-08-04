@@ -9,6 +9,7 @@ enum PropulsionDoctrine {
 
 @export_category("Identité")
 @export var display_name: String = "Bâtiment standard"
+@export var classification_label: String = "FRÉGATE"
 @export var tactical_role: String = "FRÉGATE"
 @export var crewed: bool = true
 
@@ -36,10 +37,11 @@ enum PropulsionDoctrine {
 @export var weapon_system_profiles: Array[WeaponSystemProfile] = []
 
 @export_category("Capteurs")
-@export var sensor_range: float = 420.0
-@export var active_sensor_range: float = 560.0
+@export var sensor_range: float = 378.0
+@export var active_sensor_range: float = 1008.0
 @export var active_emission_detection_range: float = 720.0
-@export var active_sensor_heat_per_second: float = 4.0
+@export var active_sensor_heat_per_second: float = 3.0
+@export_range(0.1, 1.0, 0.05) var minimum_passive_signature: float = 1.0
 @export var data_link_profile: DataLinkProfile
 
 @export_category("Émissions électromagnétiques")

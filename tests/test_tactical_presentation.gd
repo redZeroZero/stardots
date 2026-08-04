@@ -38,6 +38,19 @@ func _run() -> void:
 			failures.append("un trait devient inférieur à un pixel au zoom %.2f" % zoom)
 		if apparent_stroke > TacticalPresentation.MAXIMUM_STROKE_PX + 0.01:
 			failures.append("un trait dépasse la borne écran au zoom %.2f" % zoom)
+		var symbol_radius_screen: float = maxf(
+			TacticalUnit.BODY_RADIUS * zoom,
+			TacticalPresentation.MINIMUM_UNIT_DIAMETER_PX * 0.5
+		)
+		for extent_multiplier: float in [1.0, TacticalUnit.IDENTIFIED_SYMBOL_EXTENT_MULTIPLIER]:
+			var marker_radius_screen: float = TacticalPresentation.fire_control_marker_radius(
+				TacticalUnit.BODY_RADIUS,
+				extent_multiplier,
+				zoom
+			) * zoom
+			var marker_gap: float = marker_radius_screen - symbol_radius_screen * extent_multiplier
+			if not is_equal_approx(marker_gap, TacticalPresentation.FIRE_CONTROL_MARKER_PADDING_PX):
+				failures.append("les crochets de tir ne gardent pas leur marge au zoom %.2f" % zoom)
 
 	var small_circle_segments: int = TacticalPresentation.circle_segments(30.0, 0.15)
 	var large_circle_segments: int = TacticalPresentation.circle_segments(2800.0, 1.0)
@@ -51,6 +64,19 @@ func _run() -> void:
 		failures.append("les détails stratégiques ne sont pas pleinement visibles au zoom minimal")
 	if TacticalPresentation.close_detail_alpha(1.0) < 0.99:
 		failures.append("les détails rapprochés ne sont pas pleinement visibles au zoom 1")
+	var pulse_start: float = TacticalPresentation.contact_pulse_phase(0.0)
+	var pulse_middle: float = TacticalPresentation.contact_pulse_phase(
+		TacticalPresentation.CONTACT_PULSE_PERIOD * 0.5
+	)
+	var pulse_loop: float = TacticalPresentation.contact_pulse_phase(
+		TacticalPresentation.CONTACT_PULSE_PERIOD
+	)
+	if not is_equal_approx(pulse_start, 0.0) or not is_equal_approx(pulse_loop, 0.0):
+		failures.append("le cycle du blip de contact ne boucle pas proprement")
+	if TacticalPresentation.contact_pulse_radius(8.0, 90.0, pulse_middle) <= 8.0:
+		failures.append("l'anneau du blip ne s'étend pas pendant son cycle")
+	if TacticalPresentation.contact_pulse_alpha(pulse_middle) >= TacticalPresentation.contact_pulse_alpha(pulse_start):
+		failures.append("l'anneau du blip ne disparaît pas pendant son expansion")
 	var transition_sum: float = (
 		TacticalPresentation.strategic_detail_alpha(0.28)
 		+ TacticalPresentation.tactical_detail_alpha(0.28)
@@ -85,6 +111,26 @@ func _run() -> void:
 	var enlarged_click_point := original_position + Vector2(40.0, 0.0)
 	if not unit.contains_world_point(enlarged_click_point):
 		failures.append("la zone de clic minimale n'est pas compensée au zoom stratégique")
+	unit.set_sensor_contact(
+		TacticalUnit.IntelState.TRACKED,
+		unit.global_position,
+		20.0,
+		"BANDIT-07",
+		TacticalUnit.ClassificationState.ESTIMATED,
+		"CROISEUR"
+	)
+	if unit.get_contact_label() != "BANDIT-07 — CROISEUR ?":
+		failures.append("le libellé d'une classification probable est ambigu")
+	unit.set_sensor_contact(
+		TacticalUnit.IntelState.TRACKED,
+		unit.global_position,
+		20.0,
+		"BANDIT-07",
+		TacticalUnit.ClassificationState.CONFIRMED,
+		"CROISEUR"
+	)
+	if unit.get_contact_label() != "BANDIT-07 — CROISEUR":
+		failures.append("le libellé confirmé conserve son marqueur d'incertitude")
 	unit.free()
 
 	var railgun_projectile := RailgunProjectile.new()

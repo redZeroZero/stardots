@@ -16,6 +16,16 @@ func _run() -> void:
 	unit._update_automatic_thermal_mode(0.1)
 	if unit.thermal_mode != TacticalUnit.ThermalMode.SILENT:
 		failures.append("un bâtiment immobile ne passe pas automatiquement en silencieux")
+	unit.sensor_mode = TacticalUnit.SensorMode.ACTIVE
+	unit._update_automatic_thermal_mode(0.1)
+	if unit.thermal_mode != TacticalUnit.ThermalMode.NORMAL:
+		failures.append("un radar actif stationnaire reste en refroidissement silencieux")
+	for _tick: int in 1200:
+		unit._update_automatic_thermal_mode(0.05)
+		unit._update_thermal_state(0.05)
+	if unit.sensor_mode != TacticalUnit.SensorMode.ACTIVE:
+		failures.append("un radar actif généraliste ne tient pas une minute de veille")
+	unit.sensor_mode = TacticalUnit.SensorMode.PASSIVE
 	unit.set_move_target(Vector2(500.0, 0.0))
 	unit._update_automatic_thermal_mode(0.1)
 	if unit.thermal_mode != TacticalUnit.ThermalMode.NORMAL:

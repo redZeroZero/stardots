@@ -47,12 +47,21 @@ func _run() -> void:
 	var awacs_unit: UnitProfile = load("res://data/balance/awacs_unit.tres")
 	if default_unit.propulsion_profile == null or awacs_unit.propulsion_profile == null:
 		failures.append("les profils d'unité principaux n'utilisent pas les ressources de propulsion")
+	if default_unit.classification_label != "FRÉGATE" or awacs_unit.classification_label != "AWACS":
+		failures.append("les profils principaux n'exposent pas leur classe capteur")
 	if (
-		not is_equal_approx(default_unit.sensor_range, 700.0)
-		or not is_equal_approx(default_unit.active_sensor_range, 1000.0)
+		not is_equal_approx(default_unit.sensor_range, 630.0)
+		or not is_equal_approx(default_unit.active_sensor_range, 1800.0)
 		or not is_equal_approx(default_unit.active_emission_detection_range, 1400.0)
 	):
 		failures.append("la frégate généraliste ne conserve pas son autonomie capteur intermédiaire")
+	if not is_equal_approx(default_unit.minimum_passive_signature, 1.0):
+		failures.append("une plateforme ordinaire n'a pas de garantie passive nominale")
+	if (
+		not is_equal_approx(default_unit.active_radar_emission_strength, 2.0)
+		or not is_equal_approx(awacs_unit.active_radar_emission_strength, 4.0)
+	):
+		failures.append("l'allongement radar ne conserve pas une émission active détectable")
 	if (
 		default_unit.data_link_profile == null
 		or not default_unit.data_link_profile.can_receive

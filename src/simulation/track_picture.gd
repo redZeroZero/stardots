@@ -60,7 +60,10 @@ func observe_accumulator(accumulator: SensorObservationAccumulator) -> void:
 	)
 	var passive_state: int = SensorTrack.State.HIDDEN
 	var passive_uncertainty: float = SensorTrack.MAXIMUM_UNCERTAINTY
-	if best_passive <= 0.68 * 0.68:
+	if bool(channels & SensorTrack.Channel.THERMAL):
+		passive_state = SensorTrack.State.IDENTIFIED
+		passive_uncertainty = 2.0
+	elif best_passive <= 0.68 * 0.68:
 		passive_state = SensorTrack.State.TRACKED
 		passive_uncertainty = 20.0
 	elif best_passive <= 1.0 and triangulated:
@@ -78,6 +81,10 @@ func observe_accumulator(accumulator: SensorObservationAccumulator) -> void:
 		channels |= SensorTrack.Channel.TRIANGULATED
 	if observed_state == SensorTrack.State.HIDDEN:
 		return
+	var observed_classification: int = SensorTrack.classification_for_observation(
+		observed_state,
+		channels
+	)
 
 	var observed_position: Vector2 = target.global_position
 	var observed_velocity: Vector2 = target.velocity
@@ -94,7 +101,9 @@ func observe_accumulator(accumulator: SensorObservationAccumulator) -> void:
 		channels,
 		accumulator.passive_observer_count,
 		triangulation_quality,
-		accumulator.source_ids
+		accumulator.source_ids,
+		observed_classification,
+		target.unit_profile.classification_label
 	)
 
 
@@ -127,11 +136,13 @@ func ingest_report(report: TrackReport, target: TacticalUnit) -> void:
 	var track: SensorTrack = _get_or_create_track(target)
 	var report_uncertainty: float = report.uncertainty_radius + 8.0
 	var reported_confidence: float = report.confidence
-	if reported_confidence < track.observation_floor:
+	var improves_classification: bool = report.classification_state > track.classification_state
+	if reported_confidence < track.observation_floor and not improves_classification:
 		return
 	if (
 		reported_confidence == track.observation_floor
 		and report_uncertainty >= track.uncertainty_radius
+		and not improves_classification
 	):
 		return
 	track.observe(
@@ -142,7 +153,9 @@ func ingest_report(report: TrackReport, target: TacticalUnit) -> void:
 		report.channels,
 		1,
 		0.0,
-		report.source_ids
+		report.source_ids,
+		report.classification_state,
+		report.classification_label
 	)
 
 
@@ -166,4 +179,3 @@ func _get_or_create_track(target: TacticalUnit) -> SensorTrack:
 	if not tracks.has(target_id):
 		tracks[target_id] = SensorTrack.new(observer_team_id, target, target.maximum_acceleration)
 	return tracks[target_id]
-

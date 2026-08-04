@@ -29,7 +29,7 @@ static func build_entries() -> Array[Dictionary]:
 			"code": "ESC-L",
 			"label": "Escorte laser — défense proche",
 			"profile": _make_profile(
-				"Escorte laser", "DÉFENSE LASER",
+				"Escorte laser", "ESCORTEUR", "DÉFENSE LASER",
 				[LASER_PDC_SYSTEM, SHORT_INTERCEPTOR_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
 			),
 		},
@@ -38,7 +38,7 @@ static func build_entries() -> Array[Dictionary]:
 			"code": "ESC-K",
 			"label": "Escorte cinétique — défense proche",
 			"profile": _make_profile(
-				"Escorte cinétique", "DÉFENSE CINÉTIQUE",
+				"Escorte cinétique", "ESCORTEUR", "DÉFENSE CINÉTIQUE",
 				[KINETIC_PDC_SYSTEM, SHORT_INTERCEPTOR_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
 			),
 		},
@@ -47,7 +47,7 @@ static func build_entries() -> Array[Dictionary]:
 			"code": "FRIG",
 			"label": "Frégate — missiles moyens",
 			"profile": _make_profile(
-				"Frégate antinavire", "MISSILES MOYENS",
+				"Frégate antinavire", "FRÉGATE", "MISSILES MOYENS",
 				[KINETIC_PDC_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
 			),
 		},
@@ -56,7 +56,7 @@ static func build_entries() -> Array[Dictionary]:
 			"code": "RAIL",
 			"label": "Croiseur — railgun axial",
 			"profile": _make_profile(
-				"Croiseur railgun", "RAILGUN AXIAL",
+				"Croiseur railgun", "CROISEUR", "RAILGUN AXIAL",
 				[KINETIC_PDC_SYSTEM, RAILGUN_SYSTEM], false
 			),
 		},
@@ -65,7 +65,7 @@ static func build_entries() -> Array[Dictionary]:
 			"code": "ARS",
 			"label": "Porte-missiles — longue portée",
 			"profile": _make_profile(
-				"Porte-missiles", "CELLULES LONGUE PORTÉE",
+				"Porte-missiles", "PORTE-MISSILES", "CELLULES LONGUE PORTÉE",
 				[KINETIC_PDC_SYSTEM, LONG_MISSILE_SYSTEM], false, true
 			),
 		},
@@ -74,7 +74,7 @@ static func build_entries() -> Array[Dictionary]:
 			"code": "ARM",
 			"label": "Frégate — suppression antiradar",
 			"profile": _make_profile(
-				"Frégate de suppression", "ANTIRAD",
+				"Frégate de suppression", "FRÉGATE", "ANTIRAD",
 				[KINETIC_PDC_SYSTEM, ANTI_RADIATION_SYSTEM, MEDIUM_MISSILE_SYSTEM], true
 			),
 		},
@@ -105,6 +105,7 @@ static func consume_pending_deployment() -> Dictionary:
 
 static func _make_profile(
 	display_name: String,
+	classification_label: String,
 	role: String,
 	systems: Array[WeaponSystemProfile],
 	uses_legacy_missile_magazine: bool,
@@ -112,14 +113,15 @@ static func _make_profile(
 ) -> UnitProfile:
 	var profile: UnitProfile = UNIT_PROFILE.duplicate(true)
 	profile.display_name = display_name
+	profile.classification_label = classification_label
 	profile.tactical_role = role
 	profile.weapon_system_profiles = systems
 	if not uses_legacy_missile_magazine:
 		profile.missile_capacity = 0
 		profile.missile_launcher_count = 0
 	if receiver_only:
-		profile.sensor_range = 420.0
-		profile.active_sensor_range = 560.0
+		profile.sensor_range = 378.0
+		profile.active_sensor_range = 1008.0
 		profile.active_emission_detection_range = 720.0
 		profile.data_link_profile = RECEIVER_ONLY_DATA_LINK
 	return profile
