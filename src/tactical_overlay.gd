@@ -16,6 +16,9 @@ var engagement_envelope = EngagementEnvelopeLogic.new()
 var engagement_groups: Array[Dictionary] = []
 var fire_control_target_ids: Dictionary = {}
 var envelope_refresh_remaining: float = 0.0
+var show_collective_weapon_envelope: bool = true
+var show_collective_weapon_fill: bool = false
+var show_collective_sensor_fill: bool = false
 
 
 func bind(root: Node2D) -> void:
@@ -119,23 +122,39 @@ func _draw_engagement_envelopes(zoom_value: float) -> void:
 			group.active_sensor,
 			ACTIVE_SENSOR_FILL,
 			ACTIVE_SENSOR_BORDER,
-			sensor_width
+			sensor_width,
+			show_collective_sensor_fill
 		)
 		_draw_coverage(
 			group.passive_sensor,
 			PASSIVE_SENSOR_FILL,
 			PASSIVE_SENSOR_BORDER,
-			sensor_width
+			sensor_width,
+			show_collective_sensor_fill
 		)
-		_draw_coverage(group.weapon, WEAPON_FILL, WEAPON_BORDER, weapon_width)
+		if show_collective_weapon_envelope:
+			_draw_coverage(
+				group.weapon,
+				WEAPON_FILL,
+				WEAPON_BORDER,
+				weapon_width,
+				show_collective_weapon_fill
+			)
 
 
-func _draw_coverage(coverage: Dictionary, fill: Color, border: Color, width: float) -> void:
+func _draw_coverage(
+	coverage: Dictionary,
+	fill: Color,
+	border: Color,
+	width: float,
+	draw_source_fill: bool = true
+) -> void:
 	# Les sources sont convexes et sûres à trianguler. Les unions booléennes,
 	# parfois concaves, ne servent qu'au contour afin d'éviter les polygones invalides.
-	for source: PackedVector2Array in coverage.sources:
-		if source.size() >= 3:
-			draw_colored_polygon(source, fill)
+	if draw_source_fill:
+		for source: PackedVector2Array in coverage.sources:
+			if source.size() >= 3:
+				draw_colored_polygon(source, fill)
 	for contour: PackedVector2Array in coverage.contours:
 		if contour.size() < 3:
 			continue

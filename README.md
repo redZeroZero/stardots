@@ -70,6 +70,35 @@ Le clic droit donne un ordre aux unités sélectionnées. `Ctrl` + clic droit
 glissé déplace toujours la caméra, même avec une sélection ; l'ancien ordre de
 traversée sans arrêt utilise désormais `Alt` + clic droit.
 
+Pour essayer les premières Task Forces élastiques :
+
+```bash
+./scripts/godot --path . -- --task-force-demo
+```
+
+La démo sélectionne huit bâtiments, dont un AWACS en appui. Un clic gauche ou un
+cadre contenant au moins un de ses membres sélectionne toute la TF ; maintenir
+`Ctrl` permet au clic comme au cadre de sélectionner seulement les bâtiments
+visés pour la micro. Le clic droit déplace la TF ; maintenir le glisser
+impose aussi son cap final. `Shift` + clic droit ajoute un waypoint et `Alt` crée
+un point traversant, comme pour les unités individuelles. `1` choisit la ligne
+serrée, `2` la ligne lâche, `3` l'essaim serré et `4` l'essaim lâche, sur la
+rangée principale AZERTY/QWERTY comme sur le pavé numérique. `T` détache ou rattache
+l'éclaireur de référence et `R` rattache toutes les unités détachées.
+Donner un ordre à une seule unité membre la détache automatiquement avant
+d'exécuter sa micro. La route et son vecteur final sont dessinés une seule fois
+pour la TF ; les petites corrections internes des membres restent masquées. Les
+cercles indiquent les emplacements poursuivis et les traits montrent l'erreur de
+cohésion, sans déplacer directement les vaisseaux.
+
+La composition mélange maintenant trois frégates `TF-FLIP`, trois
+`TF-VECTOR`, un éclaireur hybride et l'AWACS. En mouvement, les membres suivent
+la position **et la vitesse** de leur emplacement : les flip-and-burn peuvent
+présenter leur moteur principal pour accélérer ou freiner sans transformer
+chaque correction en waypoint d'arrêt. Les orientations peuvent donc diverger
+pendant la manœuvre ; une fois la TF immobilisée, tous les bâtiments rejoignent
+physiquement le cap collectif final.
+
 Pour comparer les trois doctrines de propulsion sans adversaire :
 
 ```bash

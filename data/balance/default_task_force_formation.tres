@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="TaskForceFormationProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/task_force_formation_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+tight_unit_spacing = 48.0
+loose_unit_spacing = 120.0
+tight_support_distance = 180.0
+loose_support_distance = 320.0
+slot_refresh_distance = 8.0
+cohesion_full_speed_distance_multiplier = 1.5
+cohesion_minimum_speed_distance_multiplier = 6.0
+minimum_cohesion_speed_ratio = 0.35
+anchor_arrival_radius = 8.0
+anchor_stop_speed = 2.0

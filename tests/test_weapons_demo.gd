@@ -36,6 +36,10 @@ func _run() -> void:
 	if not awacs.provides_fire_control_data() or awacs.missile_launcher_count != 0:
 		failures.append("l'AWACS d'essai ne fournit pas une liaison de tir non armée")
 	battlefield.tactical_overlay._rebuild_engagement_groups()
+	if not battlefield.tactical_overlay.show_collective_weapon_envelope:
+		failures.append("l'enveloppe collective orange n'est plus activée")
+	if battlefield.tactical_overlay.show_collective_weapon_fill:
+		failures.append("les remplissages orange individuels restent activés dans l'enveloppe")
 	if battlefield.tactical_overlay.engagement_groups.size() != 1:
 		failures.append("les zones des bâtiments reliés à l'AWACS ne forment pas une enveloppe commune")
 	else:

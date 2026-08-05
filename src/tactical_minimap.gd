@@ -115,18 +115,22 @@ func _draw_engagement_envelopes() -> void:
 		_draw_minimap_coverage(
 			group.active_sensor,
 			Color(1.0, 0.42, 0.88, 0.018),
-			Color(1.0, 0.42, 0.88, 0.68)
+			Color(1.0, 0.42, 0.88, 0.68),
+			tactical_root.tactical_overlay.show_collective_sensor_fill
 		)
 		_draw_minimap_coverage(
 			group.passive_sensor,
 			Color(0.25, 0.82, 1.0, 0.025),
-			Color(0.35, 0.85, 1.0, 0.62)
+			Color(0.35, 0.85, 1.0, 0.62),
+			tactical_root.tactical_overlay.show_collective_sensor_fill
 		)
-		_draw_minimap_coverage(
-			group.weapon,
-			Color(1.0, 0.55, 0.22, 0.035),
-			Color(1.0, 0.68, 0.30, 0.78)
-		)
+		if tactical_root.tactical_overlay.show_collective_weapon_envelope:
+			_draw_minimap_coverage(
+				group.weapon,
+				Color(1.0, 0.55, 0.22, 0.035),
+				Color(1.0, 0.68, 0.30, 0.78),
+				tactical_root.tactical_overlay.show_collective_weapon_fill
+			)
 
 
 func _draw_fire_missions() -> void:
@@ -145,11 +149,17 @@ func _draw_fire_missions() -> void:
 			Color(color, 0.82),
 			1.2
 		)
-func _draw_minimap_coverage(coverage: Dictionary, fill: Color, border: Color) -> void:
-	for world_source: PackedVector2Array in coverage.sources:
-		var map_source: PackedVector2Array = _world_polygon_to_map(world_source)
-		if map_source.size() >= 3:
-			draw_colored_polygon(map_source, fill)
+func _draw_minimap_coverage(
+	coverage: Dictionary,
+	fill: Color,
+	border: Color,
+	draw_source_fill: bool = true
+) -> void:
+	if draw_source_fill:
+		for world_source: PackedVector2Array in coverage.sources:
+			var map_source: PackedVector2Array = _world_polygon_to_map(world_source)
+			if map_source.size() >= 3:
+				draw_colored_polygon(map_source, fill)
 	for world_contour: PackedVector2Array in coverage.contours:
 		var map_contour: PackedVector2Array = _world_polygon_to_map(world_contour)
 		if map_contour.size() < 3:

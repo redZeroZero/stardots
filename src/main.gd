@@ -29,6 +29,9 @@ const DEFAULT_TACTICAL_PILOT_PROFILE := preload("res://data/ai/default_tactical_
 const BLUE_FLEET_DOCTRINE: TacticalPilotProfile = preload("res://data/ai/blue_network_missiles.tres")
 const RED_FLEET_DOCTRINE: TacticalPilotProfile = preload("res://data/ai/red_silent_raiders.tres")
 const MATCH_RULES: MatchRules = preload("res://data/balance/match_rules.tres")
+const TASK_FORCE_FORMATION_PROFILE: TaskForceFormationProfile = preload(
+	"res://data/balance/default_task_force_formation.tres"
+)
 const CAMERA_SPEED: float = 620.0
 const EDGE_SCROLL_MARGIN: float = 18.0
 const ATTACK_ZONE_RADIUS: float = 180.0
@@ -110,6 +113,10 @@ var thermal_demo: bool = OS.get_cmdline_user_args().has("--thermal-demo")
 var radiation_demo: bool = OS.get_cmdline_user_args().has("--radiation-demo")
 var network_demo: bool = OS.get_cmdline_user_args().has("--network-demo")
 var fleet_battle_demo: bool = OS.get_cmdline_user_args().has("--fleet-battle-demo")
+var task_force_demo: bool = (
+	OS.get_cmdline_user_args().has("--task-force-demo")
+	or OS.get_cmdline_args().has("--task-force-demo")
+)
 var fleet_battle_seed: int = 0
 var fleet_battle_rng := RandomNumberGenerator.new()
 var range_debug_enabled: bool = OS.get_cmdline_user_args().has("--debug-ranges")
@@ -126,6 +133,9 @@ var target_camera_zoom: float = 0.42
 var zoom_anchor_world: Vector2 = Vector2.ZERO
 var zoom_anchor_screen: Vector2 = Vector2.ZERO
 var zoom_transition_active: bool = false
+var task_force_demo_force: TaskForce
+var task_force_demo_motion: TaskForceMotion
+var task_force_demo_scout: TacticalUnitScene
 
 @onready var units_layer: Node2D = $Units
 @onready var missiles_layer: Node2D = $Missiles
@@ -181,7 +191,7 @@ func _ready() -> void:
 		_begin_skirmish_setup()
 	else:
 		_spawn_demo_units()
-		if propulsion_demo or weapons_demo or sensor_demo or thermal_demo or radiation_demo or network_demo:
+		if propulsion_demo or weapons_demo or sensor_demo or thermal_demo or radiation_demo or network_demo or task_force_demo:
 			for unit: TacticalUnitScene in friendly_units:
 				selected_units.append(unit)
 				unit.set_selected(true)
@@ -189,7 +199,7 @@ func _ready() -> void:
 				tactical_camera.position = Vector2(250.0, 360.0)
 				tactical_camera.zoom = Vector2.ONE * 0.50
 				target_camera_zoom = 0.50
-			elif radiation_demo or network_demo:
+			elif radiation_demo or network_demo or task_force_demo:
 				_frame_units(friendly_units + enemy_units)
 			else:
 				_frame_friendly_units()
@@ -214,6 +224,8 @@ func _ready() -> void:
 		_update_thermal_demo_header()
 	elif propulsion_demo:
 		objective_label.text = "SCÉNARIO: COMPARATIF PROPULSION — F POUR CADRER"
+	elif task_force_demo:
+		_update_task_force_demo_header()
 	elif skirmish_setup_enabled:
 		objective_label.text = "ESCARMOUCHE LIBRE"
 	elif DUEL_SANDBOX:
@@ -270,6 +282,7 @@ func _should_start_skirmish_setup() -> bool:
 			or radiation_demo
 			or network_demo
 			or fleet_battle_demo
+			or task_force_demo
 		)
 	)
 
@@ -588,6 +601,9 @@ func _physics_process(delta: float) -> void:
 	var processed_ticks: int = simulation_clock.advance(delta)
 	if processed_ticks <= 0 or match_over:
 		return
+	if task_force_demo_motion != null:
+		task_force_demo_motion.update(delta)
+		queue_redraw()
 	_update_objective(delta)
 	if match_over:
 		return
@@ -606,7 +622,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		_handle_deployment_input(event)
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_X:
+		if task_force_demo and _handle_task_force_demo_key_event(event):
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_X:
 			_cut_selected_engines()
 		elif event.keycode == KEY_A:
 			_arm_attack_command()
@@ -720,7 +738,10 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 			if not is_selecting:
 				return
 			selection_end = get_global_mouse_position()
-			_finish_selection(Input.is_key_pressed(KEY_SHIFT))
+			_finish_selection(
+				Input.is_key_pressed(KEY_SHIFT),
+				Input.is_key_pressed(KEY_CTRL)
+			)
 	elif event.button_index == MOUSE_BUTTON_RIGHT:
 		if event.pressed:
 			_cancel_attack_command()
@@ -887,6 +908,8 @@ func _spawn_demo_units() -> void:
 		_spawn_sensor_demo_units()
 	elif thermal_demo:
 		_spawn_thermal_demo_units()
+	elif task_force_demo:
+		_spawn_task_force_demo_units()
 	elif propulsion_demo:
 		_spawn_propulsion_demo_units()
 	elif DUEL_SANDBOX:
@@ -910,6 +933,56 @@ func _spawn_demo_units() -> void:
 			_spawn_unit("B-%02d" % (index + 1), 1, enemy_positions[index], UNIT_PROFILE)
 
 	_update_sensor_picture()
+
+
+func _spawn_task_force_demo_units() -> void:
+	print("Démo Task Force active : 8 bâtiments, clic membre = sélection TF, Ctrl+clic = micro.")
+	task_force_demo_force = TaskForce.new(0, 0)
+	var flip_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
+	flip_profile.display_name = "Frégate à moteur principal"
+	flip_profile.tactical_role = "FLIP-AND-BURN"
+	flip_profile.propulsion_profile = MAIN_DRIVE_PROFILE
+	var hybrid_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
+	hybrid_profile.display_name = "Éclaireur à propulsion mixte"
+	hybrid_profile.tactical_role = "HYBRIDE"
+	hybrid_profile.propulsion_profile = HYBRID_DRIVE_PROFILE
+	var entries: Array[Dictionary] = [
+		{"callsign": "TF-FLIP-01", "profile": flip_profile, "status": TaskForce.PhysicalStatus.INTEGRATED},
+		{"callsign": "TF-FLIP-02", "profile": flip_profile, "status": TaskForce.PhysicalStatus.INTEGRATED},
+		{"callsign": "TF-FLIP-03", "profile": flip_profile, "status": TaskForce.PhysicalStatus.INTEGRATED},
+		{"callsign": "TF-VECTOR-01", "profile": UNIT_PROFILE, "status": TaskForce.PhysicalStatus.INTEGRATED},
+		{"callsign": "TF-VECTOR-02", "profile": UNIT_PROFILE, "status": TaskForce.PhysicalStatus.INTEGRATED},
+		{"callsign": "TF-VECTOR-03", "profile": UNIT_PROFILE, "status": TaskForce.PhysicalStatus.INTEGRATED},
+		{"callsign": "TF-ÉCLAIREUR", "profile": hybrid_profile, "status": TaskForce.PhysicalStatus.INTEGRATED},
+		{"callsign": "TF-AWACS", "profile": AWACS_PROFILE, "status": TaskForce.PhysicalStatus.SUPPORT},
+	]
+	for entry: Dictionary in entries:
+		var unit: TacticalUnitScene = _spawn_unit(
+			entry["callsign"],
+			0,
+			Vector2.ZERO,
+			entry["profile"]
+		)
+		task_force_demo_force.add_member(unit, entry["status"])
+		if unit.callsign == "TF-ÉCLAIREUR":
+			task_force_demo_scout = unit
+	var initial_anchor := Vector2(-1600.0, 360.0)
+	var initial_heading: float = PI * 0.5
+	task_force_demo_motion = TaskForceMotion.new()
+	task_force_demo_motion.configure(
+		task_force_demo_force,
+		TASK_FORCE_FORMATION_PROFILE,
+		initial_anchor,
+		initial_heading
+	)
+	var initial_slots: Dictionary = task_force_demo_motion.calculate_current_slots()
+	for unit: TacticalUnitScene in initial_slots:
+		unit.global_position = initial_slots[unit]
+		unit.rotation = initial_heading
+		unit.velocity = Vector2.ZERO
+		unit.cut_engines()
+	task_force_demo_motion.request_formation_refresh()
+	task_force_demo_motion.update(0.0)
 
 
 func _spawn_propulsion_demo_units() -> void:
@@ -2339,13 +2412,33 @@ func _update_sensor_picture_if_due(delta: float) -> void:
 	_update_sensor_picture()
 
 
-func _finish_selection(add_to_selection: bool) -> void:
+func _finish_selection(add_to_selection: bool, individual_selection: bool = false) -> void:
 	is_selecting = false
 	if not add_to_selection:
 		_clear_selection()
 
 	var selection_rect := Rect2(selection_start, selection_end - selection_start).abs()
 	var is_click := selection_start.distance_to(selection_end) < 6.0
+	if task_force_demo and not individual_selection and task_force_demo_force != null:
+		var selected_task_force_member: TacticalUnitScene = null
+		for unit: TacticalUnitScene in task_force_demo_force.members:
+			var member_is_selected := (
+				unit.contains_world_point(selection_end)
+				if is_click
+				else selection_rect.has_point(unit.global_position)
+			)
+			if member_is_selected:
+				selected_task_force_member = unit
+				break
+		if selected_task_force_member != null:
+			for member: TacticalUnitScene in task_force_demo_force.members:
+				if member not in selected_units and not member.destroyed:
+					selected_units.append(member)
+					member.set_selected(true)
+			_refresh_range_visualization()
+			_update_status()
+			queue_redraw()
+			return
 
 	for unit: TacticalUnitScene in friendly_units:
 		var should_select := unit.contains_world_point(selection_end) if is_click else selection_rect.has_point(unit.global_position)
@@ -2466,6 +2559,19 @@ func _issue_move_order(
 ) -> void:
 	if selected_units.is_empty():
 		return
+	if task_force_demo_motion != null and task_force_demo_force != null:
+		if selected_units.size() == 1 and selected_units[0] in task_force_demo_force.members:
+			task_force_demo_motion.detach_member(selected_units[0])
+		else:
+			task_force_demo_motion.issue_navigation_order(
+				target,
+				fly_through,
+				append,
+				requested_final_heading,
+				has_final_heading
+			)
+			_update_task_force_demo_header()
+			return
 
 	var columns: int = ceili(sqrt(float(selected_units.size())))
 	var rows: int = ceili(float(selected_units.size()) / float(columns))
@@ -3681,6 +3787,8 @@ func _update_status() -> void:
 	_update_selection_details()
 	if thermal_demo:
 		_update_thermal_demo_header()
+	elif task_force_demo:
+		_update_task_force_demo_header()
 
 
 func _update_thermal_demo_header() -> void:
@@ -3815,6 +3923,171 @@ func _update_system_control_labels() -> void:
 	thermal_mode_button.text = "THERMIQUE AUTO: %s" % thermal_text
 
 
+func _handle_task_force_demo_key(keycode: int) -> bool:
+	if task_force_demo_force == null or task_force_demo_motion == null:
+		return false
+	if keycode == KEY_1 or keycode == KEY_KP_1:
+		_set_task_force_demo_formation(TaskForce.FormationShape.LINE, TaskForce.FormationSpacing.TIGHT)
+	elif keycode == KEY_2 or keycode == KEY_KP_2:
+		_set_task_force_demo_formation(TaskForce.FormationShape.LINE, TaskForce.FormationSpacing.LOOSE)
+	elif keycode == KEY_3 or keycode == KEY_KP_3:
+		_set_task_force_demo_formation(TaskForce.FormationShape.SWARM, TaskForce.FormationSpacing.TIGHT)
+	elif keycode == KEY_4 or keycode == KEY_KP_4:
+		_set_task_force_demo_formation(TaskForce.FormationShape.SWARM, TaskForce.FormationSpacing.LOOSE)
+	elif keycode == KEY_T:
+		if task_force_demo_scout == null:
+			return false
+		if task_force_demo_force.get_member_status(task_force_demo_scout) == TaskForce.PhysicalStatus.DETACHED:
+			task_force_demo_motion.rejoin_member(task_force_demo_scout)
+		else:
+			task_force_demo_motion.detach_member(task_force_demo_scout)
+	elif keycode == KEY_R:
+		var rejoined_any: bool = false
+		for unit: TacticalUnitScene in task_force_demo_force.members:
+			if task_force_demo_force.get_member_status(unit) == TaskForce.PhysicalStatus.DETACHED:
+				rejoined_any = task_force_demo_motion.rejoin_member(unit) or rejoined_any
+		if not rejoined_any:
+			return false
+	else:
+		return false
+	_update_task_force_demo_header()
+	queue_redraw()
+	return true
+
+
+func _handle_task_force_demo_key_event(event: InputEventKey) -> bool:
+	if _handle_task_force_demo_key(event.keycode):
+		return true
+	return (
+		event.physical_keycode != event.keycode
+		and _handle_task_force_demo_key(event.physical_keycode)
+	)
+
+
+func _set_task_force_demo_formation(
+	shape: TaskForce.FormationShape,
+	spacing: TaskForce.FormationSpacing
+) -> void:
+	task_force_demo_force.set_formation(shape, spacing)
+	task_force_demo_motion.request_formation_refresh()
+
+
+func _update_task_force_demo_header() -> void:
+	if task_force_demo_force == null or task_force_demo_motion == null:
+		return
+	var shape_name := (
+		"LIGNE"
+		if task_force_demo_force.formation_shape == TaskForce.FormationShape.LINE
+		else "ESSAIM"
+	)
+	var spacing_name := (
+		"SERRÉ"
+		if task_force_demo_force.formation_spacing == TaskForce.FormationSpacing.TIGHT
+		else "LÂCHE"
+	)
+	var scout_name := "INTÉGRÉ"
+	if (
+		task_force_demo_scout != null
+		and task_force_demo_force.get_member_status(task_force_demo_scout)
+		== TaskForce.PhysicalStatus.DETACHED
+	):
+		scout_name = "DÉTACHÉ"
+	objective_label.text = (
+		"TF %s/%s  •  COHÉSION %.0f  •  ÉCLAIREUR %s  •  CLIC TF  •  CTRL+CLIC MICRO  •  1–4 FORMATION  •  T/R STATUT  •  CLIC DROIT DÉPLACE"
+		% [shape_name, spacing_name, task_force_demo_motion.get_cohesion_error(), scout_name]
+	)
+
+
+func _draw_task_force_demo_slots() -> void:
+	if not task_force_demo or task_force_demo_motion == null:
+		return
+	var zoom_value: float = tactical_camera.zoom.x
+	var slots: Dictionary = task_force_demo_motion.calculate_current_slots()
+	var line_width: float = TacticalPresentation.stroke_width(1.0, zoom_value)
+	var slot_radius: float = TacticalPresentation.world_size_for_screen_pixels(3.0, zoom_value)
+	var route_width: float = TacticalPresentation.stroke_width(1.5, zoom_value)
+	var route_points := PackedVector2Array([task_force_demo_motion.anchor_position])
+	for waypoint: NavigationWaypoint in task_force_demo_motion.navigation_route:
+		route_points.append(waypoint.position)
+	if route_points.size() > 1:
+		draw_polyline(route_points, Color(0.35, 0.85, 1.0, 0.72), route_width)
+	var waypoint_radius: float = TacticalPresentation.compensated_radius(
+		4.0,
+		TacticalPresentation.MINIMUM_WAYPOINT_DIAMETER_PX,
+		zoom_value
+	)
+	for waypoint_index: int in task_force_demo_motion.navigation_route.size():
+		var waypoint: NavigationWaypoint = task_force_demo_motion.navigation_route[waypoint_index]
+		var waypoint_color := (
+			Color("8dffaf")
+			if waypoint.passage_mode == NavigationWaypoint.PassageMode.FLY_THROUGH
+			else Color("d7fbff")
+		)
+		draw_circle(waypoint.position, waypoint_radius, Color(waypoint_color, 0.22))
+		draw_arc(
+			waypoint.position,
+			waypoint_radius,
+			0.0,
+			TAU,
+			TacticalPresentation.circle_segments(waypoint_radius, zoom_value),
+			waypoint_color,
+			route_width
+		)
+		if waypoint.has_final_heading:
+			_draw_task_force_heading_vector(
+				waypoint.position,
+				waypoint.final_heading,
+				waypoint_color,
+				route_width,
+				zoom_value
+			)
+	for unit: TacticalUnitScene in slots:
+		var slot: Vector2 = slots[unit]
+		var color := Color(0.35, 0.92, 1.0, 0.42)
+		if task_force_demo_force.get_member_status(unit) == TaskForce.PhysicalStatus.SUPPORT:
+			color = Color(0.75, 0.48, 1.0, 0.52)
+		draw_line(unit.global_position, slot, color, line_width)
+		draw_circle(slot, slot_radius, color, false, line_width)
+	var anchor_radius: float = TacticalPresentation.world_size_for_screen_pixels(5.0, zoom_value)
+	draw_circle(
+		task_force_demo_motion.anchor_position,
+		anchor_radius,
+		Color(0.95, 0.85, 0.30, 0.85),
+		false,
+		line_width
+	)
+
+
+func _draw_task_force_heading_vector(
+	origin: Vector2,
+	heading: float,
+	color: Color,
+	stroke: float,
+	zoom_value: float
+) -> void:
+	var heading_length: float = maxf(
+		24.0,
+		TacticalPresentation.world_size_for_screen_pixels(14.0, zoom_value)
+	)
+	var heading_direction: Vector2 = Vector2.UP.rotated(heading)
+	var heading_tip: Vector2 = origin + heading_direction * heading_length
+	draw_line(origin, heading_tip, color, stroke)
+	var arrow_size: float = TacticalPresentation.world_size_for_screen_pixels(4.0, zoom_value)
+	var arrow_base: Vector2 = heading_tip - heading_direction * arrow_size * 1.8
+	draw_line(
+		heading_tip,
+		arrow_base + heading_direction.rotated(PI * 0.5) * arrow_size,
+		color,
+		stroke
+	)
+	draw_line(
+		heading_tip,
+		arrow_base - heading_direction.rotated(PI * 0.5) * arrow_size,
+		color,
+		stroke
+	)
+
+
 func _draw() -> void:
 	draw_rect(WORLD_RECT, BACKGROUND_COLOR)
 	var zoom_value: float = tactical_camera.zoom.x
@@ -3828,6 +4101,7 @@ func _draw() -> void:
 	draw_rect(Rect2(WORLD_RECT.position, Vector2(edge_width, WORLD_RECT.size.y)), WORLD_EDGE_FILL)
 	draw_rect(Rect2(Vector2(WORLD_RECT.end.x - edge_width, WORLD_RECT.position.y), Vector2(edge_width, WORLD_RECT.size.y)), WORLD_EDGE_FILL)
 	draw_rect(WORLD_RECT, WORLD_BORDER_COLOR, false, TacticalPresentation.stroke_width(4.0, zoom_value))
+	_draw_task_force_demo_slots()
 
 
 func _draw_grid(spacing: float, alpha: float) -> void:

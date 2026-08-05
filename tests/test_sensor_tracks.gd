@@ -161,6 +161,8 @@ func _test_sensor_demo(failures: Array[String]) -> void:
 	):
 		failures.append("le capteur actif et le tireur missile ne sont pas prêts et sélectionnés")
 	battle.tactical_overlay._rebuild_engagement_groups()
+	if battle.tactical_overlay.show_collective_sensor_fill:
+		failures.append("les remplissages collectifs de capteurs restent activés")
 	var has_passive_envelope: bool = false
 	var has_active_envelope: bool = false
 	for group: Dictionary in battle.tactical_overlay.engagement_groups:
@@ -205,6 +207,10 @@ func _test_thermal_demo(failures: Array[String]) -> void:
 		failures.append("la démo thermique ne commence pas avec les deux références visibles au radar")
 	var cold_distance: float = sensor.global_position.distance_to(cold_target.global_position)
 	var hot_distance: float = sensor.global_position.distance_to(hot_target.global_position)
+	if not is_equal_approx(cold_target.get_passive_detection_signature(), 1.0):
+		failures.append("la référence froide de la démo ne reste pas à la portée nominale")
+	if not is_equal_approx(hot_target.get_passive_detection_signature(), 2.3):
+		failures.append("la référence chaude de la démo n'illustre pas l'amplification thermique")
 	if sensor.sensor_range * cold_target.get_passive_detection_signature() >= cold_distance:
 		failures.append("la cible froide n'est pas au-delà de la garantie passive")
 	if sensor.sensor_range * hot_target.get_passive_detection_signature() <= hot_distance:

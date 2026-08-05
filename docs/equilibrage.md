@@ -83,14 +83,14 @@ nominale × signature IR` ; après passage du veilleur en passif avec `S`, seule
 la coque chaude reste observée, puis elle disparaît naturellement en
 refroidissant.
 
-Constat du `4 août 2026` : l'amplitude actuelle est insuffisante. Le passage de
-`630` à environ `850` pour une coque très chaude ne procure qu'environ `1,2 s`
-d'alerte à une vitesse de fermeture de `190 unités/s`. À la prochaine séance,
-tester une courbe nettement plus expressive : `×1,0` au régime normal, jusqu'à
-`×2,0` pour la chaleur stockée et une pointe proche de `×2,5` sous forte poussée
-ou radiateurs de combat. Ces valeurs restent une hypothèse de test, pas un
-équilibrage final. Ne modifier aucun autre rapport de vitesse, portée ou taille
-de théâtre pendant cet essai.
+L'essai du `5 août 2026` amplifie uniquement cette contribution. Une coque froide
+ou au régime initial reste à `×1,0`, une coque à pleine chaleur atteint `×2,0`
+en régime normal et environ `×2,3` avec ses radiateurs de combat. La combinaison
+d'une forte poussée et de la chaleur est plafonnée à `×2,5`. Pour une frégate à
+`630`, cela produit des portées de `630`, `1260`, environ `1449` et au maximum
+`1575`, soit une avance théorique d'environ `3 à 5 s` à une vitesse de fermeture
+de `190 unités/s`. Ces valeurs restent un prototype d'équilibrage ; les vitesses,
+portées nominales, radars, armes et dimensions du théâtre n'ont pas changé.
 
 ## Contrôle des systèmes
 
@@ -115,6 +115,23 @@ théâtre de `12288 × 12288`. La caméra reste bornée à cette zone. La minima
 à droite affiche les bâtiments amis, le cadre de caméra et uniquement les
 contacts ennemis connus, avec une couleur dépendant de leur niveau de
 renseignement. Un clic gauche sur la minimap déplace la caméra.
+
+### Hypothèse de prochain agrandissement
+
+Le prochain essai de taille de théâtre visera `24576 × 24576`, soit deux fois la
+largeur actuelle et quatre fois sa surface. Avec un radar AWACS actif de `6000`,
+son diamètre de couverture représentera alors environ la moitié de la largeur au
+lieu de presque tout le théâtre. Les capteurs généralistes, les armes et la
+signature thermique resteront ainsi locaux, tandis que les contournements et les
+réseaux de groupes disposeront d'une profondeur réellement exploitable.
+
+À `95` unités/s, une traversée complète demanderait environ `4 min 20 s` et un
+déplacement tactique de `4000–6000` unités environ `40–65 s`. Le premier test
+devra donc conserver des forces initialement séparées de `8000–12000` unités et
+essayer un zoom minimal proche de `0,05`. Aucun changement de portée ou de vitesse
+ne devra accompagner cet agrandissement. Une carte de `32768 × 32768` restera une
+option ultérieure, mais seulement avec des objectifs spatiaux capables d'éviter
+de longues périodes de recherche sans décision.
 
 Approcher le pointeur à moins de `18 px` d'un bord de l'écran déplace aussi la
 caméra dans cette direction, comme dans un RTS classique. Les coins combinent
@@ -472,6 +489,132 @@ référence du jeu.
 `--network-demo` aligne un émetteur, un AWACS relais, un récepteur et une
 plateforme isolée face à un contact fixe. La fiche de sélection affiche le rôle
 du nœud et le nombre de pistes réellement accessibles.
+
+## Task Forces et formations physiques
+
+Une Task Force regroupe normalement de `2` à `10` bâtiments. Une TF réduite à
+un seul survivant continue d'exister jusqu'à sa dissolution ou sa fusion, mais
+une nouvelle TF demande au moins deux unités. Le plafond compte les bâtiments
+de combat, de commandement et d'appui, y compris ceux temporairement détachés.
+Un centre de commandement fixe reste en revanche un actif du théâtre et non un
+membre d'une formation mobile.
+
+Le choix de formation sépare deux axes : la forme `LIGNE` ou `ESSAIM`, puis
+l'espacement `SERRÉ` ou `LÂCHE`. La ligne attribue des emplacements ordonnés par
+rapport à un front et un cap. L'essaim organise les bâtiments autour d'un centre
+sans leur imposer un rang rigide. L'espacement modifie les distances physiques,
+pas les caractéristiques des unités.
+
+La formation n'accorde aucun bonus abstrait. Ses conséquences proviennent
+uniquement de la géométrie et des systèmes existants : arcs de tir, recouvrement
+des défenses, portée des capteurs et des liaisons, exposition, inertie et temps
+nécessaire pour changer de place. Une ligne serrée, une ligne lâche, un essaim
+serré et un essaim lâche doivent donc produire des situations différentes sans
+modificateur caché.
+
+Chaque unité possède également un statut physique dans sa TF :
+
+- `INTÉGRÉE` : occupe un emplacement dans la forme principale ;
+- `EN APPUI` : suit le centre avec un décalage et une distance de sécurité,
+  notamment pour un AWACS, un arsenal ou un bâtiment de commandement ;
+- `DÉTACHÉE` : conserve son appartenance, sa doctrine et son réseau, mais reçoit
+  ses propres ordres de mouvement.
+
+Un AWACS mobile appartient à une seule TF pour son déplacement et sa protection,
+mais peut relayer plusieurs TF accessibles sans en devenir membre. Un ordre
+individuel peut temporairement libérer une unité intégrée de son emplacement ;
+un ordre explicite de retour la fait rejoindre la formation.
+
+La formation est élastique. Son centre suit la route collective et chaque
+bâtiment poursuit un emplacement mobile avec sa propulsion réelle. Aucun
+bâtiment n'est téléporté, collé à son voisin ou déplacé par transformation de
+groupe. La formation peut se déformer pendant une accélération, un freinage ou
+un virage, puis se reconstituer. Si sa cohésion se dégrade, le mouvement collectif
+peut ralentir par des ordres de propulsion ordinaires, jamais par une correction
+magique de position ou de vitesse.
+
+L'implémentation devra rester incrémentale : modèle de TF et statuts, calcul pur
+des géométries, poursuite élastique respectant la cinématique, puis interface de
+création, changement de formation, détachement et retour. Chaque étape devra
+conserver la possibilité de sélectionner et commander un bâtiment individuellement.
+
+Le premier incrément est implémenté dans `TaskForce`. Il porte les limites de
+composition, la forme, l'espacement, l'appartenance et les trois statuts physiques,
+sans encore produire d'ordre de mouvement. Il reste séparé de `TacticalGroup`,
+qui représente aujourd'hui un domaine technique de fusion capteur et peut dépasser
+dix unités dans les scénarios de charge. Leur raccord devra donc être explicite
+plutôt que confondre prématurément commandement et traitement des capteurs.
+
+Le deuxième incrément calcule les emplacements sans commander les unités. Les
+distances provisoires sont externalisées dans
+`data/balance/default_task_force_formation.tres` : `48` unités en serré, `120` en
+lâche, avec une ligne d'appui respectivement à `180` ou `320` unités derrière
+l'ancre. Une ligne répartit les intégrés symétriquement sur son front. Un essaim
+de deux à six bâtiments forme un anneau régulier ; de sept à dix, un élément
+occupe le centre et les autres forment l'anneau. Les distances entre voisins ne
+descendent jamais sous l'espacement choisi. Les unités en appui reçoivent une
+ligne arrière orientée avec la TF et les unités détachées ne reçoivent aucun
+emplacement collectif. Ces nombres règlent uniquement la géométrie et restent
+provisoires jusqu'à un essai en mouvement.
+
+Le troisième incrément rend cette géométrie jouable dans `--task-force-demo`.
+Une ancre cinématique suit l'ordre collectif avec la vitesse, l'accélération et
+la rotation du membre commandé le moins mobile. Elle ralentit progressivement
+quand l'écart maximal aux emplacements augmente. Les cibles de formation ne sont
+republiées qu'après un déplacement de `8` unités ; chaque bâtiment les rejoint
+ensuite avec sa navigation, sa propulsion et son inertie réelles. La formation
+se déforme donc pendant la manœuvre puis se reconstitue sans téléportation.
+
+Les touches `1–4` choisissent ligne/essaim et serré/lâche. `T` détache ou rattache
+l'éclaireur de démonstration et `R` rappelle tous les détachés. Un ordre donné à
+une sélection individuelle la détache avant d'exécuter sa micro. Les emplacements,
+l'ancre et les erreurs de cohésion sont visibles dans la démo. Ce banc d'essai
+ne raccorde pas encore les TF à l'interface générale de l'escarmouche.
+
+La route appartient à l'ancre de la TF et non aux corrections de chaque membre.
+`Shift` ajoute des waypoints, les points intermédiaires deviennent traversants et
+`Alt` conserve l'ordre de traversée sans arrêt. Le tracé collectif affiche les
+waypoints et un unique vecteur de cap final stable. Les routes courtes et mobiles
+utilisées pour poursuivre les emplacements sont masquées tant que l'unité reste
+intégrée ou en appui ; une unité détachée retrouve immédiatement sa propre route
+et son propre vecteur. Cette séparation évite que l'automatisation de formation
+efface le langage visuel de navigation existant.
+
+La sélection suit la même frontière que le commandement : un clic ou un cadre
+touchant au moins un membre sélectionne la TF entière. `Ctrl` est l'exception
+explicite pour sélectionner une ou plusieurs unités individuellement. Les
+touches `1–4`, rangée principale ou pavé numérique, changent réellement la
+géométrie. Après l'arrêt de l'ancre, tous les intégrés et appuis convergent vers
+le même cap collectif ; cette orientation commune est obtenue par leur rotation
+physique, sans téléportation ni bonus abstrait.
+
+Un emplacement en mouvement transporte une position et une vitesse, et non un
+ordre implicite d'arrêt. La vitesse demandée combine translation de l'ancre,
+rotation de la formation et correction proportionnelle de l'écart. Cela permet
+aux coques flip-and-burn de retourner leur moteur principal pour corriger ou
+freiner sans replanifier continuellement un faux waypoint. Pendant une manœuvre,
+les orientations individuelles peuvent donc diverger et modifier réellement les
+arcs d'armes et de capteurs. Le cap commun ne redevient une contrainte qu'après
+stabilisation physique de toute la formation.
+
+L'union orange des zones d'armes d'une sélection multiple reste la représentation
+collective de l'engagement. Les réticules cyan restent visibles autour de chaque
+unité sélectionnée, y compris pour une TF entière ; ils ne sont pas responsables
+des halos d'enveloppe. Les arcs physiques continuent de contraindre le tir.
+
+L'enveloppe collective d'armes est dessinée uniquement par son contour orange.
+Les surfaces de chaque source ne sont pas remplies, car leurs transparences
+cumulées formaient un halo intérieur sans information supplémentaire.
+
+La même convention s'applique aux enveloppes de capteurs collectives : contours
+bleu ou magenta conservés, surfaces individuelles non remplies. Aucune opacité
+ne doit donc s'accumuler au centre d'une formation dense.
+
+La prise du cap final est individuelle une fois l'ancre stabilisée. Un membre
+déjà arrivé n'attend pas la cohésion complète de la TF pour tourner sa coque ;
+seuls les retardataires conservent leur guidage de rattrapage. Cela ne donne
+aucun avantage abstrait : chacun doit toujours être réellement à son emplacement
+et sous la vitesse d'arrêt avant d'entamer sa rotation.
 
 ## Pilote tactique adverse
 

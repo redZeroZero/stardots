@@ -13,8 +13,23 @@ func _run() -> void:
 	var failures: Array[String] = []
 	var initial_heat: float = unit.heat
 	var initial_signature: float = unit.get_thermal_signature()
-	if unit.get_passive_detection_signature() < 1.0:
-		failures.append("une signature ordinaire passe sous la garantie passive nominale")
+	if not is_equal_approx(unit.get_passive_detection_signature(), 1.0):
+		failures.append("une coque au régime initial ne reste pas à la portée passive nominale")
+
+	unit.heat = unit.heat_capacity
+	unit.thermal_mode = TacticalUnit.ThermalMode.NORMAL
+	unit.engine_signature_activity = 0.0
+	if not is_equal_approx(unit.get_passive_detection_signature(), 2.0):
+		failures.append("une coque très chaude n'atteint pas le double de la portée passive")
+	unit.thermal_mode = TacticalUnit.ThermalMode.COMBAT
+	if unit.get_passive_detection_signature() <= 2.0:
+		failures.append("les radiateurs de combat n'étendent pas la signature d'une coque chaude")
+	unit.engine_signature_activity = 1.0
+	if not is_equal_approx(unit.get_passive_detection_signature(), 2.5):
+		failures.append("la pointe thermique ne plafonne pas à deux fois et demie la portée passive")
+	unit.heat = initial_heat
+	unit.thermal_mode = TacticalUnit.ThermalMode.NORMAL
+	unit.engine_signature_activity = 0.0
 
 	unit.set_move_target(Vector2(500.0, 0.0))
 	for frame: int in 120:

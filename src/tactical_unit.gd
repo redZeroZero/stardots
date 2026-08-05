@@ -76,9 +76,10 @@ var silent_radiator_signature: float = 0.05
 var normal_radiator_signature: float = 0.15
 var combat_radiator_signature: float = 0.45
 var thermal_mode: ThermalMode = ThermalMode.NORMAL
-var baseline_thermal_signature: float = 0.70
-var stored_heat_signature_multiplier: float = 0.60
-var engine_signature_multiplier: float = 0.80
+var baseline_thermal_signature: float = 0.60
+var stored_heat_signature_multiplier: float = 1.25
+var engine_signature_multiplier: float = 0.50
+var maximum_thermal_signature: float = 2.50
 var engine_signature_activity: float = 0.0
 var propulsion_heat_per_second: float = 6.0
 var missile_launch_heat: float = 8.0
@@ -124,6 +125,7 @@ var final_heading: float = 0.0
 var selected: bool = false
 var show_support_ranges: bool = true
 var show_individual_weapon_ranges: bool = false
+var show_navigation_route: bool = true
 var intel_state: IntelState = IntelState.IDENTIFIED
 var contact_uncertainty_radius: float = 0.0
 var contact_offset: Vector2 = Vector2.ZERO
@@ -140,6 +142,9 @@ var fixed_in_place: bool = false
 var is_returning_to_theater: bool = false
 var visual_zoom: float = 1.0
 var hybrid_flip_active: bool = false
+var formation_guidance_active: bool = false
+var formation_target_position: Vector2 = Vector2.ZERO
+var formation_target_velocity: Vector2 = Vector2.ZERO
 
 
 func configure(new_callsign: String, new_team_id: int, start_position: Vector2, profile: UnitProfile) -> void:
@@ -192,6 +197,7 @@ func configure(new_callsign: String, new_team_id: int, start_position: Vector2, 
 	baseline_thermal_signature = profile.baseline_thermal_signature
 	stored_heat_signature_multiplier = profile.stored_heat_signature_multiplier
 	engine_signature_multiplier = profile.engine_signature_multiplier
+	maximum_thermal_signature = profile.maximum_thermal_signature
 	propulsion_heat_per_second = profile.propulsion_heat_per_second
 	missile_launch_heat = profile.missile_launch_heat
 	missile_loading_heat_per_second = profile.missile_loading_heat_per_second
@@ -259,7 +265,23 @@ func cut_engines() -> void:
 	has_move_target = false
 	is_orienting_to_final_heading = false
 	hybrid_flip_active = false
+	formation_guidance_active = false
 	queue_redraw()
+
+
+func set_formation_target(target_position: Vector2, target_velocity: Vector2) -> void:
+	formation_target_position = target_position
+	formation_target_velocity = target_velocity.limit_length(move_speed)
+	formation_guidance_active = true
+	navigation_route.clear()
+	has_move_target = false
+	is_orienting_to_final_heading = false
+	queue_redraw()
+
+
+func clear_formation_target() -> void:
+	formation_guidance_active = false
+	hybrid_flip_active = false
 
 
 func toggle_sensor_mode() -> void:
@@ -398,10 +420,23 @@ func set_navigation_order(
 	requested_final_heading: float = 0.0,
 	has_requested_final_heading: bool = false
 ) -> void:
+	formation_guidance_active = false
 	var route_was_active: bool = has_move_target and not navigation_route.is_empty()
 	if not append:
 		if has_move_target and navigation_route.size() == 1 and move_target.distance_to(target) <= 0.5:
-			return
+			var current_waypoint: NavigationWaypoint = navigation_route[0]
+			var same_heading: bool = (
+				current_waypoint.has_final_heading == has_requested_final_heading
+				and (
+					not has_requested_final_heading
+					or absf(angle_difference(
+						current_waypoint.final_heading,
+						requested_final_heading
+					)) <= 0.001
+				)
+			)
+			if same_heading:
+				return
 		navigation_route.clear()
 		active_leg_origin = global_position
 	else:
@@ -882,7 +917,14 @@ func get_thermal_signature() -> float:
 		radiator_signature = silent_radiator_signature
 	elif thermal_mode == ThermalMode.COMBAT:
 		radiator_signature = combat_radiator_signature
-	return maxf(0.1, baseline_thermal_signature + get_heat_ratio() * stored_heat_signature_multiplier + engine_signature_activity * engine_signature_multiplier + radiator_signature)
+	return clampf(
+		baseline_thermal_signature
+		+ get_heat_ratio() * stored_heat_signature_multiplier
+		+ engine_signature_activity * engine_signature_multiplier
+		+ radiator_signature,
+		0.1,
+		maximum_thermal_signature
+	)
 
 
 func get_passive_detection_signature() -> float:
@@ -907,6 +949,7 @@ func apply_fragment_damage(amount: float) -> void:
 		has_move_target = false
 		navigation_route.clear()
 		is_orienting_to_final_heading = false
+		formation_guidance_active = false
 		selected = false
 	queue_redraw()
 
@@ -966,6 +1009,7 @@ func _physics_process(delta: float) -> void:
 	_update_turret_tracking(delta)
 
 	if destroyed:
+		formation_guidance_active = false
 		return
 	if fixed_in_place:
 		velocity = Vector2.ZERO
@@ -973,11 +1017,14 @@ func _physics_process(delta: float) -> void:
 		has_move_target = false
 		navigation_route.clear()
 		is_orienting_to_final_heading = false
+		formation_guidance_active = false
 		if intel_state == IntelState.SIGNAL:
 			queue_redraw()
 		return
 
-	if has_move_target:
+	if formation_guidance_active:
+		_update_formation_guidance(delta)
+	elif has_move_target:
 		_update_inertial_movement(delta)
 	elif is_orienting_to_final_heading:
 		_update_final_orientation(delta)
@@ -988,6 +1035,58 @@ func _physics_process(delta: float) -> void:
 		# Sans ordre actif, aucune force ne supprime la vélocité acquise.
 		global_position += velocity * delta
 	queue_redraw()
+
+
+func _update_formation_guidance(delta: float) -> void:
+	var offset: Vector2 = formation_target_position - global_position
+	var distance: float = offset.length()
+	# Une correction proportionnelle amortit l'approche d'un emplacement mobile.
+	# Un profil de freinage de waypoint provoquerait ici des flips répétés chaque
+	# fois que l'emplacement est rafraîchi.
+	var correction_speed: float = minf(move_speed, distance * 0.8)
+	var correction_velocity := (
+		offset.normalized() * correction_speed
+		if distance > 0.001
+		else Vector2.ZERO
+	)
+	var desired_velocity: Vector2 = (
+		formation_target_velocity + correction_velocity
+	).limit_length(move_speed)
+	var velocity_error: Vector2 = desired_velocity - velocity
+	var thrust_direction := (
+		velocity_error.normalized()
+		if velocity_error.length() > 0.01
+		else Vector2.ZERO
+	)
+	var requested_acceleration: float = velocity_error.length() / maxf(delta, 0.0001)
+	var route_direction: Vector2 = formation_target_velocity.normalized()
+	if route_direction == Vector2.ZERO:
+		route_direction = offset.normalized()
+	if route_direction == Vector2.ZERO:
+		route_direction = Vector2.UP.rotated(rotation)
+	var facing_direction: Vector2 = _get_doctrine_facing_direction(
+		route_direction,
+		thrust_direction,
+		velocity_error.length(),
+		requested_acceleration
+	)
+	_rotate_toward_heading(facing_direction.angle() + PI * 0.5, delta)
+
+	var thrust_multiplier: float = _directional_thrust_multiplier(thrust_direction)
+	var available_acceleration: float = maximum_acceleration * thrust_multiplier
+	var applied_acceleration: float = minf(available_acceleration, requested_acceleration)
+	velocity += thrust_direction * applied_acceleration * delta
+	var thrust_ratio: float = (
+		applied_acceleration / maximum_acceleration
+		if maximum_acceleration > 0.0
+		else 0.0
+	)
+	if thrust_ratio > 0.01:
+		_add_heat(propulsion_heat_per_second * thrust_ratio * delta)
+		engine_signature_activity = maxf(engine_signature_activity, thrust_ratio)
+	if velocity.length() > move_speed:
+		velocity = velocity.normalized() * move_speed
+	global_position += velocity * delta
 
 
 func _update_turret_tracking(delta: float) -> void:
@@ -1293,7 +1392,8 @@ func _draw() -> void:
 		if detail_level == TacticalPresentation.DetailLevel.STRATEGIC and local_velocity_tip.length() > 0.01:
 			local_velocity_tip = local_velocity_tip.normalized() * maxf(local_velocity_tip.length(), TacticalPresentation.world_size_for_screen_pixels(12.0, visual_zoom))
 		draw_line(Vector2.ZERO, local_velocity_tip, Color(0.55, 1.0, 0.72, 0.75), important_stroke)
-		_draw_navigation_route()
+		if show_navigation_route:
+			_draw_navigation_route()
 	elif has_move_target and close_alpha > 0.01:
 		draw_line(Vector2.ZERO, to_local(move_target), Color(0.35, 0.85, 1.0, 0.32 * close_alpha), 1.0)
 	if defense_fire_remaining > 0.0 and secondary_alpha > 0.01:

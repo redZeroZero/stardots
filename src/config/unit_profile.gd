@@ -56,9 +56,10 @@ enum PropulsionDoctrine {
 @export var silent_radiator_signature: float = 0.05
 @export var normal_radiator_signature: float = 0.15
 @export var combat_radiator_signature: float = 0.45
-@export var baseline_thermal_signature: float = 0.70
-@export var stored_heat_signature_multiplier: float = 0.60
-@export var engine_signature_multiplier: float = 0.80
+@export var baseline_thermal_signature: float = 0.60
+@export var stored_heat_signature_multiplier: float = 1.25
+@export var engine_signature_multiplier: float = 0.50
+@export var maximum_thermal_signature: float = 2.50
 @export var propulsion_heat_per_second: float = 6.0
 @export var missile_launch_heat: float = 8.0
 @export var missile_loading_heat_per_second: float = 1.5
