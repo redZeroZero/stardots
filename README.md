@@ -76,15 +76,13 @@ Pour essayer les premières Task Forces élastiques :
 ./scripts/godot --path . -- --task-force-demo
 ```
 
-La démo sélectionne huit bâtiments, dont un AWACS en appui. Un clic gauche ou un
-cadre contenant au moins un de ses membres sélectionne toute la TF ; maintenir
-`Ctrl` permet au clic comme au cadre de sélectionner seulement les bâtiments
-visés pour la micro. Le clic droit déplace la TF ; maintenir le glisser
-impose aussi son cap final. `Shift` + clic droit ajoute un waypoint et `Alt` crée
-un point traversant, comme pour les unités individuelles. `1` choisit la ligne
-serrée, `2` la ligne lâche, `3` l'essaim serré et `4` l'essaim lâche, sur la
-rangée principale AZERTY/QWERTY comme sur le pavé numérique. `T` détache ou rattache
-l'éclaireur de référence et `R` rattache toutes les unités détachées.
+La démo présente trois TF homogènes de `4`, `6` et `10` frégates. `G` leur donne
+simultanément trois routes parallèles identiques afin de comparer leurs
+géométries en mouvement. Un clic gauche ou un cadre contenant au moins un membre sélectionne sa TF ;
+maintenir `Ctrl` sélectionne seulement les bâtiments visés pour la micro. Le clic
+droit déplace la TF sélectionnée ; maintenir le glisser impose aussi son cap
+final. `Shift` ajoute un waypoint, `Alt` crée un point traversant, `1–4` changent
+la formation sélectionnée et `R` rattache toutes les unités détachées.
 Donner un ordre à une seule unité membre la détache automatiquement avant
 d'exécuter sa micro. La route et son vecteur final sont dessinés une seule fois
 pour la TF ; les petites corrections internes des membres restent masquées. Les

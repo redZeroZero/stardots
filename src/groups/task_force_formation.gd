@@ -8,15 +8,30 @@ static func calculate_slots(
 	heading: float,
 	profile: TaskForceFormationProfile
 ) -> Dictionary:
-	var slots: Dictionary = {}
 	if task_force == null or profile == null:
-		return slots
+		return {}
 	var integrated: Array[TacticalUnit] = task_force.get_members_with_status(
 		TaskForce.PhysicalStatus.INTEGRATED
 	)
 	var support: Array[TacticalUnit] = task_force.get_members_with_status(
 		TaskForce.PhysicalStatus.SUPPORT
 	)
+	return calculate_slots_for_members(
+		task_force, integrated, support, anchor, heading, profile
+	)
+
+
+static func calculate_slots_for_members(
+	task_force: TaskForce,
+	integrated: Array[TacticalUnit],
+	support: Array[TacticalUnit],
+	anchor: Vector2,
+	heading: float,
+	profile: TaskForceFormationProfile
+) -> Dictionary:
+	var slots: Dictionary = {}
+	if task_force == null or profile == null:
+		return slots
 	var forward := Vector2.UP.rotated(heading)
 	var right := Vector2.RIGHT.rotated(heading)
 	var unit_spacing: float = profile.get_unit_spacing(task_force.formation_spacing)

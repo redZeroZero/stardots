@@ -133,9 +133,8 @@ var target_camera_zoom: float = 0.42
 var zoom_anchor_world: Vector2 = Vector2.ZERO
 var zoom_anchor_screen: Vector2 = Vector2.ZERO
 var zoom_transition_active: bool = false
-var task_force_demo_force: TaskForce
-var task_force_demo_motion: TaskForceMotion
-var task_force_demo_scout: TacticalUnitScene
+var task_force_demo_forces: Array[TaskForce] = []
+var task_force_demo_motions: Array[TaskForceMotion] = []
 
 @onready var units_layer: Node2D = $Units
 @onready var missiles_layer: Node2D = $Missiles
@@ -601,8 +600,9 @@ func _physics_process(delta: float) -> void:
 	var processed_ticks: int = simulation_clock.advance(delta)
 	if processed_ticks <= 0 or match_over:
 		return
-	if task_force_demo_motion != null:
-		task_force_demo_motion.update(delta)
+	if not task_force_demo_motions.is_empty():
+		for motion: TaskForceMotion in task_force_demo_motions:
+			motion.update(delta)
 		queue_redraw()
 	_update_objective(delta)
 	if match_over:
@@ -936,53 +936,37 @@ func _spawn_demo_units() -> void:
 
 
 func _spawn_task_force_demo_units() -> void:
-	print("Démo Task Force active : 8 bâtiments, clic membre = sélection TF, Ctrl+clic = micro.")
-	task_force_demo_force = TaskForce.new(0, 0)
-	var flip_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
-	flip_profile.display_name = "Frégate à moteur principal"
-	flip_profile.tactical_role = "FLIP-AND-BURN"
-	flip_profile.propulsion_profile = MAIN_DRIVE_PROFILE
-	var hybrid_profile: UnitProfile = UNIT_PROFILE.duplicate(true)
-	hybrid_profile.display_name = "Éclaireur à propulsion mixte"
-	hybrid_profile.tactical_role = "HYBRIDE"
-	hybrid_profile.propulsion_profile = HYBRID_DRIVE_PROFILE
-	var entries: Array[Dictionary] = [
-		{"callsign": "TF-FLIP-01", "profile": flip_profile, "status": TaskForce.PhysicalStatus.INTEGRATED},
-		{"callsign": "TF-FLIP-02", "profile": flip_profile, "status": TaskForce.PhysicalStatus.INTEGRATED},
-		{"callsign": "TF-FLIP-03", "profile": flip_profile, "status": TaskForce.PhysicalStatus.INTEGRATED},
-		{"callsign": "TF-VECTOR-01", "profile": UNIT_PROFILE, "status": TaskForce.PhysicalStatus.INTEGRATED},
-		{"callsign": "TF-VECTOR-02", "profile": UNIT_PROFILE, "status": TaskForce.PhysicalStatus.INTEGRATED},
-		{"callsign": "TF-VECTOR-03", "profile": UNIT_PROFILE, "status": TaskForce.PhysicalStatus.INTEGRATED},
-		{"callsign": "TF-ÉCLAIREUR", "profile": hybrid_profile, "status": TaskForce.PhysicalStatus.INTEGRATED},
-		{"callsign": "TF-AWACS", "profile": AWACS_PROFILE, "status": TaskForce.PhysicalStatus.SUPPORT},
+	print("Démo Task Force active : formations de 4, 6 et 10 bâtiments. G lance le mouvement.")
+	task_force_demo_forces.clear()
+	task_force_demo_motions.clear()
+	var configurations: Array[Dictionary] = [
+		{"anchor": Vector2(-1500.0, -720.0), "prefix": "TF4", "count": 4},
+		{"anchor": Vector2(-1500.0, 100.0), "prefix": "TF6", "count": 6},
+		{"anchor": Vector2(-1500.0, 980.0), "prefix": "TF10", "count": 10},
 	]
-	for entry: Dictionary in entries:
-		var unit: TacticalUnitScene = _spawn_unit(
-			entry["callsign"],
-			0,
-			Vector2.ZERO,
-			entry["profile"]
-		)
-		task_force_demo_force.add_member(unit, entry["status"])
-		if unit.callsign == "TF-ÉCLAIREUR":
-			task_force_demo_scout = unit
-	var initial_anchor := Vector2(-1600.0, 360.0)
-	var initial_heading: float = PI * 0.5
-	task_force_demo_motion = TaskForceMotion.new()
-	task_force_demo_motion.configure(
-		task_force_demo_force,
-		TASK_FORCE_FORMATION_PROFILE,
-		initial_anchor,
-		initial_heading
-	)
-	var initial_slots: Dictionary = task_force_demo_motion.calculate_current_slots()
-	for unit: TacticalUnitScene in initial_slots:
-		unit.global_position = initial_slots[unit]
-		unit.rotation = initial_heading
-		unit.velocity = Vector2.ZERO
-		unit.cut_engines()
-	task_force_demo_motion.request_formation_refresh()
-	task_force_demo_motion.update(0.0)
+	for force_index: int in configurations.size():
+		var configuration: Dictionary = configurations[force_index]
+		var force := TaskForce.new(force_index, 0)
+		for member_index: int in int(configuration.count):
+			var fast_unit: TacticalUnitScene = _spawn_unit(
+				"%s-%02d" % [configuration.prefix, member_index + 1],
+				0,
+				Vector2.ZERO,
+				UNIT_PROFILE
+			)
+			force.add_member(fast_unit)
+		force.set_formation(TaskForce.FormationShape.LINE, TaskForce.FormationSpacing.TIGHT)
+		var motion := TaskForceMotion.new()
+		motion.configure(force, TASK_FORCE_FORMATION_PROFILE, configuration.anchor, PI * 0.5)
+		for unit: TacticalUnitScene in motion.calculate_current_slots():
+			unit.global_position = motion.calculate_current_slots()[unit]
+			unit.rotation = PI * 0.5
+			unit.velocity = Vector2.ZERO
+			unit.cut_engines()
+		motion.request_formation_refresh()
+		motion.update(0.0)
+		task_force_demo_forces.append(force)
+		task_force_demo_motions.append(motion)
 
 
 func _spawn_propulsion_demo_units() -> void:
@@ -2419,19 +2403,22 @@ func _finish_selection(add_to_selection: bool, individual_selection: bool = fals
 
 	var selection_rect := Rect2(selection_start, selection_end - selection_start).abs()
 	var is_click := selection_start.distance_to(selection_end) < 6.0
-	if task_force_demo and not individual_selection and task_force_demo_force != null:
-		var selected_task_force_member: TacticalUnitScene = null
-		for unit: TacticalUnitScene in task_force_demo_force.members:
-			var member_is_selected := (
-				unit.contains_world_point(selection_end)
-				if is_click
-				else selection_rect.has_point(unit.global_position)
-			)
-			if member_is_selected:
-				selected_task_force_member = unit
+	if task_force_demo and not individual_selection:
+		var selected_force: TaskForce = null
+		for force: TaskForce in task_force_demo_forces:
+			for unit: TacticalUnitScene in force.members:
+				var member_is_selected := (
+					unit.contains_world_point(selection_end)
+					if is_click
+					else selection_rect.has_point(unit.global_position)
+				)
+				if member_is_selected:
+					selected_force = force
+					break
+			if selected_force != null:
 				break
-		if selected_task_force_member != null:
-			for member: TacticalUnitScene in task_force_demo_force.members:
+		if selected_force != null:
+			for member: TacticalUnitScene in selected_force.members:
 				if member not in selected_units and not member.destroyed:
 					selected_units.append(member)
 					member.set_selected(true)
@@ -2466,19 +2453,64 @@ func _toggle_range_debug() -> void:
 
 
 func _refresh_range_visualization() -> void:
-	var show_technical_detail: bool = selected_units.size() == 1 or range_debug_enabled
+	var show_technical_detail: bool = (
+		range_debug_enabled
+		or (selected_units.size() == 1 and not uses_collective_engagement_envelope())
+	)
 	for unit: TacticalUnitScene in selected_units:
 		if is_instance_valid(unit):
 			unit.set_range_visualization(show_technical_detail, show_technical_detail)
 	tactical_overlay.invalidate_engagement_envelope()
 
 
+func uses_collective_engagement_envelope() -> bool:
+	if range_debug_enabled or selected_units.is_empty():
+		return false
+	if selected_units.size() > 1:
+		return true
+	return _get_task_force_for_unit(selected_units[0]) != null
+
+
+func _get_task_force_for_unit(unit: TacticalUnitScene) -> TaskForce:
+	for force: TaskForce in task_force_demo_forces:
+		if unit in force.members:
+			return force
+	return null
+
+
+func _get_motion_for_force(force: TaskForce) -> TaskForceMotion:
+	var force_index: int = task_force_demo_forces.find(force)
+	if force_index < 0 or force_index >= task_force_demo_motions.size():
+		return null
+	return task_force_demo_motions[force_index]
+
+
+func _get_selected_task_force() -> TaskForce:
+	if selected_units.is_empty():
+		return null
+	var force: TaskForce = _get_task_force_for_unit(selected_units[0])
+	if force == null:
+		return null
+	for unit: TacticalUnitScene in selected_units:
+		if unit not in force.members:
+			return null
+	return force
+
+
 func get_engagement_group_id(unit: TacticalUnitScene) -> int:
+	var demo_force: TaskForce = _get_task_force_for_unit(unit)
+	if demo_force != null:
+		return demo_force.get_instance_id()
 	var provider = _get_connected_fire_control_provider(unit)
 	return provider.get_instance_id() if is_instance_valid(provider) else unit.get_instance_id()
 
 
 func unit_contributes_sensor_to_group(unit: TacticalUnitScene, group_id: int) -> bool:
+	var demo_force: TaskForce = _get_task_force_for_unit(unit)
+	if demo_force != null and demo_force.get_instance_id() == group_id:
+		# Regroupement d'affichage uniquement : la simulation capteur et les
+		# transferts de pistes conservent leurs règles locales habituelles.
+		return true
 	var group_provider = instance_from_id(group_id)
 	if not is_instance_valid(group_provider) or group_provider == unit:
 		return true
@@ -2559,11 +2591,13 @@ func _issue_move_order(
 ) -> void:
 	if selected_units.is_empty():
 		return
-	if task_force_demo_motion != null and task_force_demo_force != null:
-		if selected_units.size() == 1 and selected_units[0] in task_force_demo_force.members:
-			task_force_demo_motion.detach_member(selected_units[0])
-		else:
-			task_force_demo_motion.issue_navigation_order(
+	if not task_force_demo_motions.is_empty():
+		var selected_force: TaskForce = _get_selected_task_force()
+		var selected_motion: TaskForceMotion = _get_motion_for_force(selected_force)
+		if selected_units.size() == 1 and selected_motion != null:
+			selected_motion.detach_member(selected_units[0])
+		elif selected_motion != null:
+			selected_motion.issue_navigation_order(
 				target,
 				fly_through,
 				append,
@@ -3924,7 +3958,7 @@ func _update_system_control_labels() -> void:
 
 
 func _handle_task_force_demo_key(keycode: int) -> bool:
-	if task_force_demo_force == null or task_force_demo_motion == null:
+	if task_force_demo_forces.is_empty() or task_force_demo_motions.is_empty():
 		return false
 	if keycode == KEY_1 or keycode == KEY_KP_1:
 		_set_task_force_demo_formation(TaskForce.FormationShape.LINE, TaskForce.FormationSpacing.TIGHT)
@@ -3934,18 +3968,17 @@ func _handle_task_force_demo_key(keycode: int) -> bool:
 		_set_task_force_demo_formation(TaskForce.FormationShape.SWARM, TaskForce.FormationSpacing.TIGHT)
 	elif keycode == KEY_4 or keycode == KEY_KP_4:
 		_set_task_force_demo_formation(TaskForce.FormationShape.SWARM, TaskForce.FormationSpacing.LOOSE)
-	elif keycode == KEY_T:
-		if task_force_demo_scout == null:
-			return false
-		if task_force_demo_force.get_member_status(task_force_demo_scout) == TaskForce.PhysicalStatus.DETACHED:
-			task_force_demo_motion.rejoin_member(task_force_demo_scout)
-		else:
-			task_force_demo_motion.detach_member(task_force_demo_scout)
+	elif keycode == KEY_G:
+		for motion: TaskForceMotion in task_force_demo_motions:
+			motion.issue_move_order(motion.anchor_position + Vector2(2600.0, 0.0))
 	elif keycode == KEY_R:
 		var rejoined_any: bool = false
-		for unit: TacticalUnitScene in task_force_demo_force.members:
-			if task_force_demo_force.get_member_status(unit) == TaskForce.PhysicalStatus.DETACHED:
-				rejoined_any = task_force_demo_motion.rejoin_member(unit) or rejoined_any
+		for force_index: int in task_force_demo_forces.size():
+			var force: TaskForce = task_force_demo_forces[force_index]
+			var motion: TaskForceMotion = task_force_demo_motions[force_index]
+			for unit: TacticalUnitScene in force.members:
+				if force.get_member_status(unit) == TaskForce.PhysicalStatus.DETACHED:
+					rejoined_any = motion.rejoin_member(unit) or rejoined_any
 		if not rejoined_any:
 			return false
 	else:
@@ -3968,46 +4001,45 @@ func _set_task_force_demo_formation(
 	shape: TaskForce.FormationShape,
 	spacing: TaskForce.FormationSpacing
 ) -> void:
-	task_force_demo_force.set_formation(shape, spacing)
-	task_force_demo_motion.request_formation_refresh()
+	var selected_force: TaskForce = _get_selected_task_force()
+	if selected_force != null:
+		_get_motion_for_force(selected_force).set_formation(shape, spacing)
+	else:
+		for motion: TaskForceMotion in task_force_demo_motions:
+			motion.set_formation(shape, spacing)
 
 
 func _update_task_force_demo_header() -> void:
-	if task_force_demo_force == null or task_force_demo_motion == null:
+	if task_force_demo_forces.size() < 3 or task_force_demo_motions.size() < 3:
 		return
-	var shape_name := (
-		"LIGNE"
-		if task_force_demo_force.formation_shape == TaskForce.FormationShape.LINE
-		else "ESSAIM"
-	)
-	var spacing_name := (
-		"SERRÉ"
-		if task_force_demo_force.formation_spacing == TaskForce.FormationSpacing.TIGHT
-		else "LÂCHE"
-	)
-	var scout_name := "INTÉGRÉ"
-	if (
-		task_force_demo_scout != null
-		and task_force_demo_force.get_member_status(task_force_demo_scout)
-		== TaskForce.PhysicalStatus.DETACHED
-	):
-		scout_name = "DÉTACHÉ"
 	objective_label.text = (
-		"TF %s/%s  •  COHÉSION %.0f  •  ÉCLAIREUR %s  •  CLIC TF  •  CTRL+CLIC MICRO  •  1–4 FORMATION  •  T/R STATUT  •  CLIC DROIT DÉPLACE"
-		% [shape_name, spacing_name, task_force_demo_motion.get_cohesion_error(), scout_name]
+		"FORMATIONS TF  •  HAUT 4  •  MILIEU 6  •  BAS 10  •  G MOUVEMENT PARALLÈLE  •  CLIC TF  •  CTRL+CLIC MICRO  •  1–4 FORME  •  R RATTACHE"
 	)
 
 
 func _draw_task_force_demo_slots() -> void:
-	if not task_force_demo or task_force_demo_motion == null:
+	if not task_force_demo or task_force_demo_motions.is_empty():
 		return
+	for force_index: int in task_force_demo_motions.size():
+		_draw_task_force_demo_motion(
+			task_force_demo_forces[force_index],
+			task_force_demo_motions[force_index],
+			Color("70e6ff") if force_index == 0 else Color("ffbd48")
+		)
+
+
+func _draw_task_force_demo_motion(
+	force: TaskForce,
+	motion: TaskForceMotion,
+	base_color: Color
+) -> void:
 	var zoom_value: float = tactical_camera.zoom.x
-	var slots: Dictionary = task_force_demo_motion.calculate_current_slots()
+	var slots: Dictionary = motion.calculate_current_slots()
 	var line_width: float = TacticalPresentation.stroke_width(1.0, zoom_value)
 	var slot_radius: float = TacticalPresentation.world_size_for_screen_pixels(3.0, zoom_value)
 	var route_width: float = TacticalPresentation.stroke_width(1.5, zoom_value)
-	var route_points := PackedVector2Array([task_force_demo_motion.anchor_position])
-	for waypoint: NavigationWaypoint in task_force_demo_motion.navigation_route:
+	var route_points := PackedVector2Array([motion.anchor_position])
+	for waypoint: NavigationWaypoint in motion.navigation_route:
 		route_points.append(waypoint.position)
 	if route_points.size() > 1:
 		draw_polyline(route_points, Color(0.35, 0.85, 1.0, 0.72), route_width)
@@ -4016,8 +4048,8 @@ func _draw_task_force_demo_slots() -> void:
 		TacticalPresentation.MINIMUM_WAYPOINT_DIAMETER_PX,
 		zoom_value
 	)
-	for waypoint_index: int in task_force_demo_motion.navigation_route.size():
-		var waypoint: NavigationWaypoint = task_force_demo_motion.navigation_route[waypoint_index]
+	for waypoint_index: int in motion.navigation_route.size():
+		var waypoint: NavigationWaypoint = motion.navigation_route[waypoint_index]
 		var waypoint_color := (
 			Color("8dffaf")
 			if waypoint.passage_mode == NavigationWaypoint.PassageMode.FLY_THROUGH
@@ -4043,16 +4075,16 @@ func _draw_task_force_demo_slots() -> void:
 			)
 	for unit: TacticalUnitScene in slots:
 		var slot: Vector2 = slots[unit]
-		var color := Color(0.35, 0.92, 1.0, 0.42)
-		if task_force_demo_force.get_member_status(unit) == TaskForce.PhysicalStatus.SUPPORT:
+		var color := Color(base_color, 0.46)
+		if force.get_member_status(unit) == TaskForce.PhysicalStatus.SUPPORT:
 			color = Color(0.75, 0.48, 1.0, 0.52)
 		draw_line(unit.global_position, slot, color, line_width)
 		draw_circle(slot, slot_radius, color, false, line_width)
 	var anchor_radius: float = TacticalPresentation.world_size_for_screen_pixels(5.0, zoom_value)
 	draw_circle(
-		task_force_demo_motion.anchor_position,
+		motion.anchor_position,
 		anchor_radius,
-		Color(0.95, 0.85, 0.30, 0.85),
+		Color(base_color, 0.90),
 		false,
 		line_width
 	)

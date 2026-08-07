@@ -524,6 +524,10 @@ Un AWACS mobile appartient à une seule TF pour son déplacement et sa protectio
 mais peut relayer plusieurs TF accessibles sans en devenir membre. Un ordre
 individuel peut temporairement libérer une unité intégrée de son emplacement ;
 un ordre explicite de retour la fait rejoindre la formation.
+L'emplacement ainsi libéré reste vacant : la micro d'un seul bâtiment ne
+redistribue pas les autres membres et ne leur émet aucun nouvel ordre. La place
+n'est recalculée qu'en cas de changement explicite de formation ou de perte du
+membre.
 
 La formation est élastique. Son centre suit la route collective et chaque
 bâtiment poursuit un emplacement mobile avec sa propulsion réelle. Aucun
@@ -565,11 +569,18 @@ republiées qu'après un déplacement de `8` unités ; chaque bâtiment les rejo
 ensuite avec sa navigation, sa propulsion et son inertie réelles. La formation
 se déforme donc pendant la manœuvre puis se reconstitue sans téléportation.
 
-Les touches `1–4` choisissent ligne/essaim et serré/lâche. `T` détache ou rattache
-l'éclaireur de démonstration et `R` rappelle tous les détachés. Un ordre donné à
-une sélection individuelle la détache avant d'exécuter sa micro. Les emplacements,
-l'ancre et les erreurs de cohésion sont visibles dans la démo. Ce banc d'essai
-ne raccorde pas encore les TF à l'interface générale de l'escarmouche.
+Le banc d'essai présente trois TF homogènes de `4`, `6` et `10` frégates sur des
+routes parallèles identiques. `G` lance les trois ordres simultanément. Les
+touches `1–4` choisissent ligne/essaim et serré/lâche pour la TF sélectionnée,
+et `R` rappelle tous les détachés. Un ordre donné à une sélection individuelle
+la détache avant d'exécuter sa micro.
+Le changement de formation appartient au contrôleur `TaskForceMotion` : il met à
+jour le modèle et invalide les emplacements dans une seule opération. Les touches
+de la démo ne font que choisir le ou les contrôleurs concernés.
+Dans cette démonstration, les enveloppes tactiques sont regroupées par TF : une
+union orange pour les armes et une union bleue par formation. Ce regroupement
+reste strictement visuel et ne crée ni fusion capteur omnisciente ni transfert
+de piste supplémentaire dans la simulation.
 
 La route appartient à l'ancre de la TF et non aux corrections de chaque membre.
 `Shift` ajoute des waypoints, les points intermédiaires deviennent traversants et
@@ -597,10 +608,12 @@ les orientations individuelles peuvent donc diverger et modifier réellement les
 arcs d'armes et de capteurs. Le cap commun ne redevient une contrainte qu'après
 stabilisation physique de toute la formation.
 
-L'union orange des zones d'armes d'une sélection multiple reste la représentation
-collective de l'engagement. Les réticules cyan restent visibles autour de chaque
-unité sélectionnée, y compris pour une TF entière ; ils ne sont pas responsables
-des halos d'enveloppe. Les arcs physiques continuent de contraindre le tir.
+L'union orange des zones d'armes reste la représentation tactique de
+l'engagement pour une sélection collective comme pour la micro d'un membre de
+TF. Les réticules cyan restent visibles autour de chaque unité sélectionnée, y
+compris pour une TF entière ; ils ne sont pas responsables des halos
+d'enveloppe. Les arcs physiques continuent de contraindre le tir. Le détail
+séparé des secteurs reste accessible par le mode de debug des portées.
 
 L'enveloppe collective d'armes est dessinée uniquement par son contour orange.
 Les surfaces de chaque source ne sont pas remplies, car leurs transparences

@@ -76,7 +76,7 @@ func _rebuild_engagement_groups() -> void:
 			and tactical_root.selected_group_has_fire_control_solution(target)
 		):
 			fire_control_target_ids[target.get_instance_id()] = true
-	if tactical_root.selected_units.size() <= 1:
+	if not tactical_root.uses_collective_engagement_envelope():
 		return
 	var units_by_group: Dictionary = {}
 	for unit in tactical_root.selected_units:

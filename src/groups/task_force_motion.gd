@@ -97,18 +97,29 @@ func set_member_status(unit: TacticalUnit, physical_status: TaskForce.PhysicalSt
 	if task_force == null:
 		return false
 	var previous_status: int = task_force.get_member_status(unit)
+	var previous_layout_status: int = previous_status
+	if previous_status == TaskForce.PhysicalStatus.DETACHED:
+		previous_layout_status = int(_status_before_detachment_by_instance_id.get(
+			unit.get_instance_id(),
+			TaskForce.PhysicalStatus.DETACHED
+		))
 	if previous_status < 0 or not task_force.set_member_status(unit, physical_status):
 		return false
+	var new_layout_status: int = physical_status
 	if physical_status == TaskForce.PhysicalStatus.DETACHED:
 		if previous_status != TaskForce.PhysicalStatus.DETACHED:
 			_status_before_detachment_by_instance_id[unit.get_instance_id()] = previous_status
+		new_layout_status = previous_layout_status
 		unit.cut_engines()
 		unit.show_navigation_route = true
 	else:
 		_status_before_detachment_by_instance_id.erase(unit.get_instance_id())
 		unit.show_navigation_route = false
 	_last_slots.erase(unit)
-	_force_slot_refresh = true
+	# Une micro individuelle laisse une place vacante : les autres membres ne
+	# doivent ni se redistribuer, ni recevoir de nouveau un ordre identique.
+	if previous_layout_status != new_layout_status:
+		_force_slot_refresh = true
 	return true
 
 
@@ -128,6 +139,16 @@ func rejoin_member(unit: TacticalUnit) -> bool:
 
 func request_formation_refresh() -> void:
 	_force_slot_refresh = true
+
+
+func set_formation(
+	shape: TaskForce.FormationShape,
+	spacing: TaskForce.FormationSpacing
+) -> bool:
+	if task_force == null or not task_force.set_formation(shape, spacing):
+		return false
+	request_formation_refresh()
+	return true
 
 
 func update(delta: float) -> void:
@@ -160,8 +181,31 @@ func update(delta: float) -> void:
 
 
 func calculate_current_slots() -> Dictionary:
-	return TaskForceFormation.calculate_slots(
+	var slots: Dictionary = _calculate_reserved_slots()
+	for unit: TacticalUnit in task_force.members:
+		if task_force.get_member_status(unit) == TaskForce.PhysicalStatus.DETACHED:
+			slots.erase(unit)
+	return slots
+
+
+func _calculate_reserved_slots() -> Dictionary:
+	var integrated: Array[TacticalUnit] = []
+	var support: Array[TacticalUnit] = []
+	for unit: TacticalUnit in task_force.members:
+		var layout_status: int = task_force.get_member_status(unit)
+		if layout_status == TaskForce.PhysicalStatus.DETACHED:
+			layout_status = int(_status_before_detachment_by_instance_id.get(
+				unit.get_instance_id(),
+				TaskForce.PhysicalStatus.DETACHED
+			))
+		if layout_status == TaskForce.PhysicalStatus.INTEGRATED:
+			integrated.append(unit)
+		elif layout_status == TaskForce.PhysicalStatus.SUPPORT:
+			support.append(unit)
+	return TaskForceFormation.calculate_slots_for_members(
 		task_force,
+		integrated,
+		support,
 		anchor_position,
 		anchor_heading,
 		formation_profile
@@ -175,6 +219,14 @@ func get_cohesion_error() -> float:
 		if is_instance_valid(unit) and not unit.destroyed:
 			maximum_error = maxf(maximum_error, unit.global_position.distance_to(slots[unit]))
 	return maximum_error
+
+
+func get_command_speed_limit() -> float:
+	return _get_slowest_member_speed()
+
+
+func get_command_acceleration_limit() -> float:
+	return _get_slowest_member_acceleration()
 
 
 func _advance_anchor(delta: float) -> void:

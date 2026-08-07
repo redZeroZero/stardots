@@ -109,7 +109,7 @@ func _draw() -> void:
 
 
 func _draw_engagement_envelopes() -> void:
-	if tactical_root.range_debug_enabled or tactical_root.selected_units.size() <= 1:
+	if not tactical_root.uses_collective_engagement_envelope():
 		return
 	for group: Dictionary in tactical_root.tactical_overlay.engagement_groups:
 		_draw_minimap_coverage(
