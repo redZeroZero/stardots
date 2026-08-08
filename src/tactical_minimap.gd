@@ -92,6 +92,8 @@ func _draw() -> void:
 	for missile in missiles_layer.get_children():
 		if not is_instance_valid(missile) or not missile.is_interceptable():
 			continue
+		if missile.team_id != 0 and not tactical_root.is_hostile_missile_known_to_player(missile):
+			continue
 		_draw_missile_symbol(
 			_world_to_map(missile.global_position),
 			missile.velocity.normalized(),

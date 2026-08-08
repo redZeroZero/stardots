@@ -71,7 +71,19 @@ enum FireDoctrine {
 var simulation_clock := SimulationClock.new()
 var friendly_units: Array[TacticalUnitScene] = []
 var enemy_units: Array[TacticalUnitScene] = []
-var selected_units: Array[TacticalUnitScene] = []
+var selection_state := TacticalSelectionState.new()
+var selected_units: Array[TacticalUnit] = selection_state.units
+var task_force_registry := TaskForceRegistry.new()
+var window_mode_controller := TacticalWindowModeController.new()
+var tactical_event_log := TacticalEventLog.new()
+var alert_signature: String = ""
+var event_log_revision: int = -1
+var task_force_ui_signature: String = ""
+var roster_ui_revision: int = -1
+var roster_ui_force_id: int = -1
+var task_force_buttons: Dictionary = {}
+var roster_buttons: Dictionary = {}
+var formation_preset_buttons: Array[Button] = []
 var is_selecting: bool = false
 var selection_start: Vector2
 var selection_end: Vector2
@@ -135,6 +147,7 @@ var zoom_anchor_screen: Vector2 = Vector2.ZERO
 var zoom_transition_active: bool = false
 var task_force_demo_forces: Array[TaskForce] = []
 var task_force_demo_motions: Array[TaskForceMotion] = []
+var task_force_motions: Dictionary = {}
 
 @onready var units_layer: Node2D = $Units
 @onready var missiles_layer: Node2D = $Missiles
@@ -154,9 +167,16 @@ var task_force_demo_motions: Array[TaskForceMotion] = []
 @onready var thermal_mode_button: Button = %ThermalModeButton
 @onready var restart_button: Button = %RestartButton
 @onready var info_button: Button = %InfoButton
+@onready var event_log_button: Button = %EventLogButton
+@onready var alert_label: Label = %AlertLabel
+@onready var event_log_margin: MarginContainer = $Interface/EventLogMargin
+@onready var event_log_label: Label = %EventLogLabel
 @onready var secondary_info: PanelContainer = %SecondaryInfo
 @onready var victory_label: Label = %VictoryLabel
 @onready var tactical_minimap: TacticalMinimap = %TacticalMinimap
+@onready var task_force_list: VBoxContainer = %TaskForceList
+@onready var roster_list: HBoxContainer = %RosterList
+@onready var task_force_bar_margin: MarginContainer = $Interface/TaskForceBarMargin
 @onready var tactical_overlay: TacticalOverlay = $TacticalOverlay
 @onready var tactical_labels: TacticalLabels = $TacticalLabels
 @onready var skirmish_setup_panel: SkirmishSetupPanel = %SkirmishSetupPanel
@@ -165,13 +185,16 @@ var task_force_demo_motions: Array[TaskForceMotion] = []
 @onready var restart_margin: MarginContainer = $Interface/RestartMargin
 @onready var edit_setup_margin: MarginContainer = %EditSetupMargin
 @onready var edit_setup_button: Button = %EditSetupButton
+@onready var formation_preset_list: HBoxContainer = %FormationPresetList
 
 
 func _ready() -> void:
 	_configure_fleet_battle_seed()
+	window_mode_controller.sync_from_display()
 	get_viewport().size_changed.connect(queue_redraw)
 	restart_button.pressed.connect(_restart_match)
 	info_button.pressed.connect(_toggle_secondary_info)
+	event_log_button.pressed.connect(_toggle_event_log)
 	cut_engines_button.pressed.connect(_cut_selected_engines)
 	attack_mode_button.pressed.connect(_toggle_attack_command)
 	weapon_select_button.pressed.connect(_cycle_offensive_weapon_selection)
@@ -190,10 +213,12 @@ func _ready() -> void:
 		_begin_skirmish_setup()
 	else:
 		_spawn_demo_units()
+		if task_force_demo:
+			task_force_registry.register_forces(task_force_demo_forces)
+		_rebuild_task_force_motions()
 		if propulsion_demo or weapons_demo or sensor_demo or thermal_demo or radiation_demo or network_demo or task_force_demo:
 			for unit: TacticalUnitScene in friendly_units:
-				selected_units.append(unit)
-				unit.set_selected(true)
+				selection_state.add(unit)
 			if sensor_demo or thermal_demo:
 				tactical_camera.position = Vector2(250.0, 360.0)
 				tactical_camera.zoom = Vector2.ONE * 0.50
@@ -233,6 +258,8 @@ func _ready() -> void:
 		_spawn_objective_station()
 	_update_status()
 	_update_fire_control_buttons()
+	event_log_margin.visible = false
+	alert_label.visible = false
 	queue_redraw()
 
 
@@ -363,8 +390,7 @@ func _next_skirmish_callsign(team_id: int, entry: Dictionary) -> String:
 func _select_deployment_unit(unit: TacticalUnitScene) -> void:
 	_clear_selection()
 	if unit != null and is_instance_valid(unit):
-		selected_units.append(unit)
-		unit.set_selected(true)
+		selection_state.add(unit)
 	skirmish_setup_panel.set_has_selection(not selected_units.is_empty())
 	queue_redraw()
 
@@ -432,9 +458,36 @@ func _capture_skirmish_deployment() -> Array[Dictionary]:
 	return deployment
 
 
+func _rebuild_task_force_motions() -> void:
+	task_force_motions.clear()
+	var forces: Array[TaskForce] = task_force_registry.get_forces(0)
+	for force_index: int in forces.size():
+		var force: TaskForce = forces[force_index]
+		if force.members.is_empty():
+			continue
+		if task_force_demo and force_index < task_force_demo_motions.size():
+			task_force_motions[force.task_force_id] = task_force_demo_motions[force_index]
+			continue
+		var anchor := Vector2.ZERO
+		var heading := 0.0
+		for unit: TacticalUnitScene in force.members:
+			anchor += unit.global_position
+			heading += unit.rotation
+		anchor /= float(force.members.size())
+		heading /= float(force.members.size())
+		var motion := TaskForceMotion.new()
+		motion.configure(force, TASK_FORCE_FORMATION_PROFILE, anchor, heading)
+		motion.update(0.0)
+		task_force_motions[force.task_force_id] = motion
+
+
 func _launch_skirmish() -> bool:
 	if not deployment_mode or friendly_units.is_empty():
 		return false
+	if not task_force_registry.rebuild_from_tactical_groups(friendly_units):
+		skirmish_setup_panel.set_validation_error(task_force_registry.validation_errors[0])
+		return false
+	_rebuild_task_force_motions()
 	skirmish_deployment_snapshot = _capture_skirmish_deployment()
 	deployment_mode = false
 	skirmish_battle_active = true
@@ -482,6 +535,31 @@ func _edit_skirmish_setup() -> void:
 func _toggle_secondary_info() -> void:
 	secondary_info.visible = not secondary_info.visible
 	info_button.text = "MASQUER [I]" if secondary_info.visible else "INFOS [I]"
+
+
+func _toggle_event_log() -> void:
+	event_log_margin.visible = not event_log_margin.visible
+	event_log_button.text = "MASQUER [L]" if event_log_margin.visible else "JOURNAL [L]"
+	_update_event_log_panel()
+
+
+func _record_event(message: String) -> void:
+	tactical_event_log.append_event(simulation_clock.tick_index, message)
+	_update_event_log_panel()
+
+
+func _update_event_log_panel() -> void:
+	if tactical_event_log.revision == event_log_revision and not event_log_margin.visible:
+		return
+	event_log_revision = tactical_event_log.revision
+	var lines := tactical_event_log.get_text()
+	event_log_label.text = "JOURNAL TACTIQUE\n" + (lines if not lines.is_empty() else "— aucun événement —")
+
+
+func _cycle_window_mode() -> void:
+	window_mode_controller.cycle()
+	last_attack_feedback = "AFFICHAGE: %s" % window_mode_controller.get_label()
+	_update_status()
 
 
 func _cut_selected_engines() -> void:
@@ -600,8 +678,8 @@ func _physics_process(delta: float) -> void:
 	var processed_ticks: int = simulation_clock.advance(delta)
 	if processed_ticks <= 0 or match_over:
 		return
-	if not task_force_demo_motions.is_empty():
-		for motion: TaskForceMotion in task_force_demo_motions:
+	if not task_force_motions.is_empty():
+		for motion: TaskForceMotion in task_force_motions.values():
 			motion.update(delta)
 		queue_redraw()
 	_update_objective(delta)
@@ -622,7 +700,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		_handle_deployment_input(event)
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if task_force_demo and _handle_task_force_demo_key_event(event):
+		if _handle_task_force_selection_shortcut(event):
+			get_viewport().set_input_as_handled()
+		elif _handle_task_force_formation_shortcut(event):
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_R and _rejoin_task_force_members():
+			get_viewport().set_input_as_handled()
+		elif task_force_demo and _handle_task_force_demo_key_event(event):
 			get_viewport().set_input_as_handled()
 		elif event.keycode == KEY_X:
 			_cut_selected_engines()
@@ -636,12 +720,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_cycle_fire_doctrine()
 		elif event.keycode == KEY_I:
 			_toggle_secondary_info()
+		elif event.keycode == KEY_L:
+			_toggle_event_log()
 		elif event.keycode == KEY_V:
 			_toggle_range_debug()
 		elif event.keycode == KEY_F:
 			_frame_friendly_units()
 		elif event.keycode == KEY_C:
 			_focus_selected_units()
+		elif event.keycode == KEY_F11:
+			_cycle_window_mode()
 		elif event.keycode == KEY_ESCAPE:
 			if attack_command_armed:
 				_cancel_attack_command()
@@ -2403,9 +2491,9 @@ func _finish_selection(add_to_selection: bool, individual_selection: bool = fals
 
 	var selection_rect := Rect2(selection_start, selection_end - selection_start).abs()
 	var is_click := selection_start.distance_to(selection_end) < 6.0
-	if task_force_demo and not individual_selection:
+	if not individual_selection:
 		var selected_force: TaskForce = null
-		for force: TaskForce in task_force_demo_forces:
+		for force: TaskForce in task_force_registry.get_forces(0):
 			for unit: TacticalUnitScene in force.members:
 				var member_is_selected := (
 					unit.contains_world_point(selection_end)
@@ -2418,10 +2506,7 @@ func _finish_selection(add_to_selection: bool, individual_selection: bool = fals
 			if selected_force != null:
 				break
 		if selected_force != null:
-			for member: TacticalUnitScene in selected_force.members:
-				if member not in selected_units and not member.destroyed:
-					selected_units.append(member)
-					member.set_selected(true)
+			selection_state.select_task_force(selected_force)
 			_refresh_range_visualization()
 			_update_status()
 			queue_redraw()
@@ -2430,8 +2515,7 @@ func _finish_selection(add_to_selection: bool, individual_selection: bool = fals
 	for unit: TacticalUnitScene in friendly_units:
 		var should_select := unit.contains_world_point(selection_end) if is_click else selection_rect.has_point(unit.global_position)
 		if should_select and unit not in selected_units:
-			selected_units.append(unit)
-			unit.set_selected(true)
+			selection_state.add(unit)
 
 	_refresh_range_visualization()
 	_update_status()
@@ -2439,9 +2523,7 @@ func _finish_selection(add_to_selection: bool, individual_selection: bool = fals
 
 
 func _clear_selection() -> void:
-	for unit: TacticalUnitScene in selected_units:
-		unit.set_selected(false)
-	selected_units.clear()
+	selection_state.clear()
 	tactical_overlay.invalidate_engagement_envelope()
 
 
@@ -2472,13 +2554,15 @@ func uses_collective_engagement_envelope() -> bool:
 
 
 func _get_task_force_for_unit(unit: TacticalUnitScene) -> TaskForce:
-	for force: TaskForce in task_force_demo_forces:
-		if unit in force.members:
-			return force
-	return null
+	return task_force_registry.get_force_for_unit(unit)
 
 
 func _get_motion_for_force(force: TaskForce) -> TaskForceMotion:
+	if force == null:
+		return null
+	var shared_motion: TaskForceMotion = task_force_motions.get(force.task_force_id)
+	if shared_motion != null:
+		return shared_motion
 	var force_index: int = task_force_demo_forces.find(force)
 	if force_index < 0 or force_index >= task_force_demo_motions.size():
 		return null
@@ -2488,6 +2572,8 @@ func _get_motion_for_force(force: TaskForce) -> TaskForceMotion:
 func _get_selected_task_force() -> TaskForce:
 	if selected_units.is_empty():
 		return null
+	if selection_state.selected_task_force != null:
+		return selection_state.selected_task_force
 	var force: TaskForce = _get_task_force_for_unit(selected_units[0])
 	if force == null:
 		return null
@@ -2591,12 +2677,19 @@ func _issue_move_order(
 ) -> void:
 	if selected_units.is_empty():
 		return
-	if not task_force_demo_motions.is_empty():
-		var selected_force: TaskForce = _get_selected_task_force()
-		var selected_motion: TaskForceMotion = _get_motion_for_force(selected_force)
-		if selected_units.size() == 1 and selected_motion != null:
+	var selected_force: TaskForce = _get_selected_task_force()
+	var selected_motion: TaskForceMotion = _get_motion_for_force(selected_force)
+	if selected_motion != null:
+		if selected_units.size() == 1:
 			selected_motion.detach_member(selected_units[0])
-		elif selected_motion != null:
+			selected_units[0].set_navigation_order(
+				target,
+				fly_through,
+				append,
+				requested_final_heading,
+				has_final_heading
+			)
+		else:
 			selected_motion.issue_navigation_order(
 				target,
 				fly_through,
@@ -2604,8 +2697,9 @@ func _issue_move_order(
 				requested_final_heading,
 				has_final_heading
 			)
+		if task_force_demo:
 			_update_task_force_demo_header()
-			return
+		return
 
 	var columns: int = ceili(sqrt(float(selected_units.size())))
 	var rows: int = ceili(float(selected_units.size()) / float(columns))
@@ -2642,6 +2736,7 @@ func _issue_attack_zone(zone_center: Vector2) -> int:
 	active_fire_missions.append(mission)
 	var shots_fired: int = _evaluate_fire_mission(mission)
 	last_attack_feedback = mission.status_text
+	_record_event("MISSION — %s" % mission.status_text)
 	_update_status()
 	queue_redraw()
 	return shots_fired
@@ -2669,6 +2764,7 @@ func _update_fire_missions() -> void:
 			and mission.assigned_units.any(func(unit): return unit in selected_units)
 		):
 			last_attack_feedback = mission.status_text
+			_record_event("MISSION — %s" % mission.status_text)
 			status_changed = true
 	active_fire_missions = active_fire_missions.filter(
 		func(mission): return not mission.assigned_units.is_empty()
@@ -2690,7 +2786,10 @@ func _evaluate_fire_mission(mission: FireMission) -> int:
 		return _get_contact_position(0, first).distance_squared_to(mission.center) < _get_contact_position(0, second).distance_squared_to(mission.center)
 	)
 	if candidates.is_empty():
-		mission.mark_waiting("ATTENTE CONTACT")
+		mission.mark_waiting(
+			TacticalUiContract.block_reason_label(FireMission.BlockReason.NO_CONTACT),
+			FireMission.BlockReason.NO_CONTACT
+		)
 		return 0
 	var shots_fired: int = 0
 	var missile_allocation: Dictionary = {"cursor": 0}
@@ -2708,9 +2807,10 @@ func _evaluate_fire_mission(mission: FireMission) -> int:
 	if shots_fired > 0:
 		mission.mark_fired(shots_fired, ATTACK_ZONE_DISPLAY_DURATION)
 	else:
-		mission.mark_blocked(_get_attack_block_reason(
+		var block_reason: FireMission.BlockReason = _get_attack_block_reason(
 			candidates[0], mission.assigned_units, mission.weapon_selection
-		))
+		)
+		mission.mark_blocked(block_reason, TacticalUiContract.block_reason_label(block_reason))
 	return shots_fired
 
 
@@ -2769,12 +2869,16 @@ func _get_attack_block_reason(
 	target: TacticalUnitScene,
 	launchers: Array,
 	weapon_selection: int
-) -> String:
+) -> FireMission.BlockReason:
 	var found_weapon: bool = false
 	var found_in_range: bool = false
 	var found_in_arc: bool = false
 	var found_radio_bearing: bool = false
 	var found_fire_control: bool = false
+	var found_not_overheated: bool = false
+	var found_ammunition: bool = false
+	var found_reloaded: bool = false
+	var found_aligned: bool = false
 	for launcher: TacticalUnitScene in launchers:
 		for system: WeaponSystemProfile in launcher.weapon_system_profiles:
 			if (
@@ -2816,19 +2920,52 @@ func _get_attack_block_reason(
 			):
 				continue
 			found_fire_control = true
+			if launcher.is_weapons_overheated():
+				continue
+			found_not_overheated = true
+			var has_ammunition: bool = system.feed_type == WeaponSystemProfile.FeedType.ENERGY
+			if system.family == WeaponSystemProfile.Family.MISSILE:
+				has_ammunition = (
+					launcher.get_anti_ship_burst_capacity() > 0
+					if system.tactical_role == WeaponSystemProfile.TacticalRole.ANTI_SHIP
+					else launcher.get_weapon_system_ammunition(system) > 0
+				)
+			else:
+				has_ammunition = has_ammunition or launcher.get_weapon_system_ammunition(system) > 0
+			if not has_ammunition:
+				continue
+			found_ammunition = true
+			var is_reloaded: bool = float(launcher.weapon_system_cooldowns.get(system, 0.0)) <= 0.0
+			if (
+				system.family == WeaponSystemProfile.Family.MISSILE
+				and system.feed_type != WeaponSystemProfile.FeedType.FIXED_CELLS
+			):
+				is_reloaded = launcher.weapon_cooldown_remaining <= 0.0 and launcher.get_ready_launcher_count() > 0
+			if not is_reloaded:
+				continue
+			found_reloaded = true
+			if not launcher.is_weapon_system_aligned(system, target_position):
+				continue
+			found_aligned = true
 	if not found_weapon:
-		if weapon_selection == OffensiveWeaponSelection.ANTI_RADIATION:
-			return "ATTENTE: AUCUNE ARME ANTIRAD"
-		return "ATTENTE: AUCUNE ARME COMPATIBLE"
+		return FireMission.BlockReason.NO_COMPATIBLE_WEAPON
 	if weapon_selection == OffensiveWeaponSelection.ANTI_RADIATION and not found_radio_bearing:
-		return "ATTENTE: ÉMISSION RADIO"
+		return FireMission.BlockReason.NO_RADIO_EMISSION
 	if not found_in_range:
-		return "ATTENTE: PORTÉE"
+		return FireMission.BlockReason.OUT_OF_RANGE
 	if not found_in_arc:
-		return "ATTENTE: ARC"
+		return FireMission.BlockReason.OUT_OF_ARC
 	if not found_fire_control:
-		return "ATTENTE: PISTE OU LIAISON"
-	return "ATTENTE: RECHARGE, POINTAGE OU CHALEUR"
+		return FireMission.BlockReason.FIRE_CONTROL_UNAVAILABLE
+	if not found_not_overheated:
+		return FireMission.BlockReason.OVERHEATED
+	if not found_ammunition:
+		return FireMission.BlockReason.NO_AMMUNITION
+	if not found_reloaded:
+		return FireMission.BlockReason.RELOADING
+	if not found_aligned:
+		return FireMission.BlockReason.AIMING
+	return FireMission.BlockReason.RELOADING
 
 
 func _launch_anti_radiation_salvo(
@@ -3753,6 +3890,7 @@ func _calculate_intercept_point(origin: Vector2, target_position: Vector2, targe
 func _on_missile_detonated(world_position: Vector2, fragment_radius: float, maximum_damage: float, intercepted: bool, missile_team_id: int) -> void:
 	if intercepted:
 		missile_interceptions[1 - missile_team_id] += 1
+		_record_event("MISSILE — interception")
 	var units: Array = friendly_units + enemy_units
 	for unit in units:
 		if not is_instance_valid(unit) or unit.destroyed:
@@ -3770,19 +3908,73 @@ func _on_missile_detonated(world_position: Vector2, fragment_radius: float, maxi
 			var missile_falloff: float = 1.0 - missile_distance / fragment_radius
 			missile.apply_point_defense_damage(maximum_damage * missile_falloff)
 	var previous_selection_size: int = selected_units.size()
-	selected_units = selected_units.filter(func(unit): return is_instance_valid(unit) and not unit.destroyed)
+	selection_state.prune_invalid()
 	if selected_units.size() != previous_selection_size:
 		_refresh_range_visualization()
 
 
-func _on_missile_impacted(_target: Node2D, missile_team_id: int) -> void:
+func _on_missile_impacted(target: Node2D, missile_team_id: int) -> void:
 	confirmed_impacts += 1
 	missile_impacts[missile_team_id] += 1
+	if target != null and target.has_method("get"):
+		_record_event("%s — impact" % String(target.get("callsign")))
 	_update_status()
 
 
 func _on_missile_finished(_missile: TacticalMissileScene) -> void:
 	_update_status()
+
+
+func _update_alerts() -> void:
+	var alerts: Array[String] = []
+	var incoming_count: int = 0
+	for missile in missiles_layer.get_children():
+		if (
+			not is_instance_valid(missile)
+			or missile.team_id == 0
+			or not missile.is_interceptable()
+			or not is_hostile_missile_known_to_player(missile)
+		):
+			continue
+		if is_instance_valid(missile.target) and missile.target.team_id == 0 and not missile.target.destroyed:
+			incoming_count += 1
+	if incoming_count > 0:
+		alerts.append("MISSILE ENTRANT ×%d" % incoming_count)
+	var critical_count: int = 0
+	var isolated_count: int = 0
+	var empty_ammunition_count: int = 0
+	for unit: TacticalUnitScene in selected_units:
+		if unit.maximum_hull > 0.0 and unit.hull / unit.maximum_hull <= 0.25:
+			critical_count += 1
+		if _get_connected_fire_control_provider(unit) == null:
+			isolated_count += 1
+		if unit.missile_capacity > 0 and unit.missiles_remaining <= 0:
+			empty_ammunition_count += 1
+	if critical_count > 0:
+		alerts.append("BÂTIMENT CRITIQUE ×%d" % critical_count)
+	if isolated_count > 0:
+		alerts.append("HORS LIAISON ×%d" % isolated_count)
+	if empty_ammunition_count > 0:
+		alerts.append("MUNITIONS PRINCIPALES ÉPUISÉES")
+	var next_signature := "|".join(alerts)
+	if next_signature != alert_signature:
+		if not next_signature.is_empty():
+			_record_event("ALERTE — %s" % next_signature)
+		alert_signature = next_signature
+	alert_label.visible = not alerts.is_empty()
+	alert_label.text = "ALERTE  •  " + "  |  ".join(alerts)
+
+
+func is_hostile_missile_known_to_player(missile: TacticalMissileScene) -> bool:
+	if missile == null or missile.team_id == 0:
+		return true
+	for sensor: TacticalUnitScene in friendly_units:
+		if sensor.destroyed:
+			continue
+		var detection_range: float = sensor.active_sensor_range if sensor.sensor_mode == TacticalUnitScene.SensorMode.ACTIVE else sensor.sensor_range
+		if sensor.global_position.distance_squared_to(missile.global_position) <= detection_range * detection_range:
+			return true
+	return false
 
 
 func _update_status() -> void:
@@ -3792,7 +3984,7 @@ func _update_status() -> void:
 	for missile in missiles_layer.get_children():
 		if missile.team_id == 0:
 			friendly_missiles += 1
-		else:
+		elif is_hostile_missile_known_to_player(missile):
 			hostile_missiles += 1
 	status_label.text = "TICK %06d  //  SÉLECTION %02d  //  MISSILES %02d/%02d  //  IMPACTS %02d" % [
 		simulation_clock.tick_index,
@@ -3807,18 +3999,20 @@ func _update_status() -> void:
 	elif not last_attack_feedback.is_empty():
 		status_label.text += "  //  %s" % last_attack_feedback
 	var blue_alive: int = friendly_units.filter(func(unit): return not unit.destroyed).size()
-	var red_alive: int = enemy_units.filter(func(unit): return not unit.destroyed).size()
 	var blue_ammunition: int = 0
-	var red_ammunition: int = 0
 	for unit: TacticalUnitScene in friendly_units:
 		blue_ammunition += unit.missiles_remaining
-	for unit: TacticalUnitScene in enemy_units:
-		red_ammunition += unit.missiles_remaining
-	telemetry_label.text = "BLEU %d/%d  MUN %d  TIRS %d  TOUCHÉS %d  INTERCEPT. %d\nROUGE %d/%d  MUN %d  TIRS %d  TOUCHÉS %d  INTERCEPT. %d" % [
+	var known_red_contacts: int = enemy_units.filter(func(unit):
+		return not unit.destroyed and unit.intel_state != TacticalUnit.IntelState.HIDDEN
+	).size()
+	telemetry_label.text = "BLEU %d/%d  MUN %d  TIRS %d  TOUCHÉS %d  INTERCEPT. %d\nROUGE CONTACTS %d  • DONNÉES ARMEMENT INCONNUES" % [
 		blue_alive, friendly_units.size(), blue_ammunition, missiles_launched[0], missile_impacts[0], missile_interceptions[0],
-		red_alive, enemy_units.size(), red_ammunition, missiles_launched[1], missile_impacts[1], missile_interceptions[1],
+		known_red_contacts,
 	]
 	_update_selection_details()
+	_refresh_task_force_ui()
+	_update_alerts()
+	_update_event_log_panel()
 	if thermal_demo:
 		_update_thermal_demo_header()
 	elif task_force_demo:
@@ -3864,6 +4058,197 @@ func _get_selected_fire_mission_status() -> String:
 	return "MISSIONS: %d ACTIVES" % selected_missions.size()
 
 
+func _refresh_task_force_ui() -> void:
+	var forces: Array[TaskForce] = task_force_registry.get_forces(0)
+	task_force_bar_margin.visible = not forces.is_empty()
+	formation_preset_list.visible = not forces.is_empty() and not task_force_motions.is_empty()
+	if formation_preset_list.visible and formation_preset_buttons.is_empty():
+		_rebuild_formation_preset_buttons()
+	if forces.is_empty():
+		return
+	var signature_parts: Array[String] = []
+	for force: TaskForce in forces:
+		signature_parts.append("%d:%d" % [force.task_force_id, force.members.size()])
+	var signature := ",".join(signature_parts)
+	if signature != task_force_ui_signature:
+		_rebuild_task_force_buttons(forces)
+		task_force_ui_signature = signature
+	for force: TaskForce in forces:
+		var button: Button = task_force_buttons.get(force.task_force_id)
+		if button == null:
+			continue
+		button.text = _task_force_tile_text(force, forces.find(force) + 1)
+		button.button_pressed = _is_selected_task_force(force)
+	var selected_force := _get_selected_task_force()
+	var selected_revision: int = selection_state.revision
+	var selected_force_id: int = selected_force.task_force_id if selected_force != null else -1
+	if selected_force_id != roster_ui_force_id:
+		_rebuild_roster_buttons(selected_force)
+		roster_ui_revision = selected_revision
+		roster_ui_force_id = selected_force_id
+	if selected_force != null:
+		for unit: TacticalUnitScene in selected_force.members:
+			var button: Button = roster_buttons.get(unit.get_instance_id())
+			if button != null:
+				button.text = _roster_tile_text(unit)
+	if selected_force == null:
+		roster_list.visible = false
+	else:
+		roster_list.visible = true
+	_update_formation_preset_buttons(selected_force)
+
+
+func _rebuild_formation_preset_buttons() -> void:
+	for child in formation_preset_list.get_children():
+		child.queue_free()
+	formation_preset_buttons.clear()
+	var labels: Array[String] = ["1 L-S", "2 L-L", "3 E-S", "4 E-L"]
+	for preset_index: int in labels.size():
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(52, 22)
+		button.toggle_mode = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.text = labels[preset_index]
+		button.tooltip_text = [
+			"Ligne serrée",
+			"Ligne lâche",
+			"Essaim serré",
+			"Essaim lâche",
+		][preset_index]
+		button.pressed.connect(_on_formation_preset_pressed.bind(preset_index))
+		formation_preset_list.add_child(button)
+		formation_preset_buttons.append(button)
+
+
+func _update_formation_preset_buttons(selected_force: TaskForce) -> void:
+	if task_force_motions.is_empty():
+		return
+	var shape: int = TaskForce.FormationShape.LINE
+	var spacing: int = TaskForce.FormationSpacing.TIGHT
+	if selected_force != null:
+		shape = selected_force.formation_shape
+		spacing = selected_force.formation_spacing
+	for preset_index: int in formation_preset_buttons.size():
+		var button := formation_preset_buttons[preset_index]
+		var preset_shape: int = TaskForce.FormationShape.LINE if preset_index < 2 else TaskForce.FormationShape.SWARM
+		var preset_spacing: int = TaskForce.FormationSpacing.TIGHT if preset_index % 2 == 0 else TaskForce.FormationSpacing.LOOSE
+		button.button_pressed = shape == preset_shape and spacing == preset_spacing
+
+
+func _on_formation_preset_pressed(preset_index: int) -> void:
+	var shape: TaskForce.FormationShape = TaskForce.FormationShape.LINE if preset_index < 2 else TaskForce.FormationShape.SWARM
+	var spacing: TaskForce.FormationSpacing = TaskForce.FormationSpacing.TIGHT if preset_index % 2 == 0 else TaskForce.FormationSpacing.LOOSE
+	_set_task_force_formation(shape, spacing)
+	_update_status()
+
+
+func _rebuild_task_force_buttons(forces: Array[TaskForce]) -> void:
+	for child in task_force_list.get_children():
+		if child.name not in ["Title", "FormationPresetList"]:
+			child.free()
+	task_force_buttons.clear()
+	for force_index: int in forces.size():
+		var force: TaskForce = forces[force_index]
+		var button := Button.new()
+		button.name = "TaskForceTile%d" % force.task_force_id
+		button.custom_minimum_size = Vector2(0, 28)
+		button.toggle_mode = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		button.tooltip_text = "Sélectionner %s\nDouble-clic : cadrer la Task Force\nRaccourci : %d" % [force.display_name, force_index + 1]
+		button.pressed.connect(_on_task_force_tile_pressed.bind(force))
+		button.gui_input.connect(_on_task_force_tile_gui_input.bind(force))
+		task_force_list.add_child(button)
+		task_force_buttons[force.task_force_id] = button
+
+
+func _rebuild_roster_buttons(force: TaskForce) -> void:
+	for child in roster_list.get_children():
+		child.free()
+	roster_buttons.clear()
+	if force == null:
+		return
+	for unit: TacticalUnitScene in force.members:
+		if not is_instance_valid(unit) or unit.destroyed:
+			continue
+		var button := Button.new()
+		button.name = "RosterTile%s" % unit.get_instance_id()
+		button.custom_minimum_size = Vector2(88, 22)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.focus_mode = Control.FOCUS_NONE
+		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		button.tooltip_text = "Sélectionner %s\nCOQ = coque • CH = chaleur\nINT = intégré • APP = appui • DÉT = détaché\nLIÉ = réseau disponible • ISO = isolé\nDouble-clic : cadrer le bâtiment" % unit.callsign
+		button.pressed.connect(_on_roster_tile_pressed.bind(unit, force))
+		button.gui_input.connect(_on_roster_tile_gui_input.bind(unit, force))
+		roster_list.add_child(button)
+		roster_buttons[unit.get_instance_id()] = button
+
+
+func _on_task_force_tile_pressed(force: TaskForce) -> void:
+	selection_state.select_task_force(force)
+	_refresh_range_visualization()
+	_update_status()
+	queue_redraw()
+
+
+func _on_task_force_tile_gui_input(event: InputEvent, force: TaskForce) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and event.double_click:
+		_frame_units(force.members)
+
+
+func _on_roster_tile_pressed(unit: TacticalUnitScene, force: TaskForce) -> void:
+	selection_state.select_unit(unit, force)
+	_refresh_range_visualization()
+	_update_status()
+	queue_redraw()
+
+
+func _on_roster_tile_gui_input(event: InputEvent, unit: TacticalUnitScene, _force: TaskForce) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and event.double_click:
+		_frame_units([unit])
+
+
+func _is_selected_task_force(force: TaskForce) -> bool:
+	return _get_selected_task_force() == force
+
+
+func _task_force_tile_text(force: TaskForce, shortcut_index: int) -> String:
+	var living_count: int = 0
+	var critical_count: int = 0
+	var ammunition_count: int = 0
+	for unit: TacticalUnitScene in force.members:
+		if not is_instance_valid(unit) or unit.destroyed:
+			continue
+		living_count += 1
+		ammunition_count += unit.missiles_remaining
+		if unit.maximum_hull > 0.0 and unit.hull / unit.maximum_hull <= 0.25:
+			critical_count += 1
+	var alert_text := "!" if critical_count > 0 else ("MUN" if ammunition_count == 0 else "OK")
+	return "[%d] %s  •  %d/%d  %s" % [shortcut_index, force.display_name, living_count, force.members.size(), alert_text]
+
+
+func _roster_tile_text(unit: TacticalUnitScene) -> String:
+	var hull_ratio: float = unit.hull / unit.maximum_hull if unit.maximum_hull > 0.0 else 0.0
+	var network_text := "LIÉ" if _get_connected_fire_control_provider(unit) != null else "ISO"
+	var alert_text := " !" if hull_ratio <= 0.25 else ""
+	var force := _get_task_force_for_unit(unit)
+	var status_text := ""
+	if force != null:
+		status_text = {
+			TaskForce.PhysicalStatus.INTEGRATED: "INT",
+			TaskForce.PhysicalStatus.SUPPORT: "APP",
+			TaskForce.PhysicalStatus.DETACHED: "DÉT",
+		}.get(force.get_member_status(unit), "")
+	return "%s%s  COQ %.0f  •  CH %.0f  •  %s  %s" % [
+		unit.callsign,
+		alert_text,
+		100.0 * hull_ratio,
+		100.0 * unit.get_heat_ratio(),
+		status_text,
+		network_text,
+	]
+
+
 func _update_selection_details() -> void:
 	_update_system_control_labels()
 	if selected_units.is_empty():
@@ -3886,6 +4271,7 @@ func _update_selection_details() -> void:
 			network_text += " • CONDUITE %.0f" % unit.get_data_link_range()
 		elif fire_control_provider != null:
 			network_text += " • VIA %s" % fire_control_provider.callsign
+		var compact_network_text := "RELIÉ" if fire_control_provider != null else "ISOLÉ"
 		var route_text := "ROUTE —"
 		if unit.is_returning_to_theater:
 			route_text = "HORS SECTEUR • RETOUR AUTO"
@@ -3893,7 +4279,19 @@ func _update_selection_details() -> void:
 			route_text = "ROUTE %d  •  V.PROCH %.0f" % [
 				unit.navigation_route.size(), unit.navigation_route[0].planned_speed,
 			]
-		selection_details_label.text = "%s  //  %s  //  %s  //  %s  •  COQUE %.0f/%.0f\nVIT %.0f/%.0f  •  ACC %.0f  •  ROT %.0f°/s  •  PROP. %s [%s]  •  PHASE %s  •  %s\nCAPT. %s %.0f  •  %s  •  EM %.2f [%s]  •  THERM. %s  •  CHALEUR %.0f/%.0f  •  IR %.2f\nPDC %.0f  MUN %d/%d  •  TIR %.0f  •  TUBES %d/%d  CHARGE %d  •  MISSILES %d/%d  (%s)\nARMES: %s" % [
+		selection_details_label.text = "%s  •  %s  •  COQUE %.0f%%  •  CHALEUR %.0f%%  •  RÉSEAU %s  •  MSL %d/%d  •  PDC %d/%d  •  %s" % [
+			unit.callsign,
+			unit.unit_profile.tactical_role,
+			100.0 * unit.hull / unit.maximum_hull if unit.maximum_hull > 0.0 else 0.0,
+			100.0 * unit.get_heat_ratio(),
+			compact_network_text,
+			unit.missiles_remaining,
+			unit.missile_capacity,
+			unit.point_defense_ammunition,
+			unit.point_defense_ammunition_capacity,
+			"RETOUR" if unit.is_returning_to_theater else "OK",
+		]
+		telemetry_label.text += "\n\nDÉTAILS SÉLECTION\n" + "%s  //  %s  //  %s  //  %s  •  COQUE %.0f/%.0f\nVIT %.0f/%.0f  •  ACC %.0f  •  ROT %.0f°/s  •  PROP. %s [%s]  •  PHASE %s  •  %s\nCAPT. %s %.0f  •  %s  •  EM %.2f [%s]  •  THERM. %s  •  CHALEUR %.0f/%.0f  •  IR %.2f\nPDC %.0f  MUN %d/%d  •  TIR %.0f  •  TUBES %d/%d  CHARGE %d  •  MISSILES %d/%d  (%s)\nARMES: %s" % [
 			unit.callsign, unit.unit_profile.tactical_role, unit.unit_profile.display_name, crew_text,
 			unit.hull, unit.maximum_hull,
 			unit.velocity.length(), unit.move_speed, unit.maximum_acceleration,
@@ -3932,6 +4330,7 @@ func _update_selection_details() -> void:
 		launchers_ready, launchers_loading, missiles_available, missile_capacity,
 		pdc_ammunition, pdc_capacity,
 	]
+	telemetry_label.text += "\n\nDÉTAILS SÉLECTION\n" + selection_details_label.text
 
 
 func _update_system_control_labels() -> void:
@@ -3942,9 +4341,17 @@ func _update_system_control_labels() -> void:
 	thermal_mode_button.disabled = true
 	if disabled:
 		attack_mode_button.text = "ATTAQUE [A]"
+		attack_mode_button.tooltip_text = "Sélectionnez une unité ou une Task Force avant de créer une mission de feu."
 		sensor_mode_button.text = "CAPTEUR: — [S]"
 		thermal_mode_button.text = "THERMIQUE: AUTO"
 		return
+	var selected_mission_status := _get_selected_fire_mission_status()
+	attack_mode_button.tooltip_text = (
+		"Mission sélectionnée : %s\nÉchap : annuler la mission sélectionnée."
+		% selected_mission_status
+		if not selected_mission_status.is_empty()
+		else "Créer une mission de feu avec A, puis cliquer dans la zone cible."
+	)
 	var first_unit: TacticalUnitScene = selected_units[0]
 	var sensor_text: String = first_unit.get_sensor_mode_name()
 	var thermal_text: String = first_unit.get_thermal_mode_name()
@@ -3957,17 +4364,63 @@ func _update_system_control_labels() -> void:
 	thermal_mode_button.text = "THERMIQUE AUTO: %s" % thermal_text
 
 
+func _handle_task_force_selection_shortcut(event: InputEventKey) -> bool:
+	var force_index: int = TacticalUiContract.task_force_shortcut_index(event)
+	if force_index < 0:
+		return false
+	var player_forces: Array[TaskForce] = task_force_registry.get_forces(0)
+	if force_index >= player_forces.size():
+		return false
+	selection_state.select_task_force(player_forces[force_index])
+	_refresh_range_visualization()
+	_update_status()
+	queue_redraw()
+	return true
+
+
+func _handle_task_force_formation_shortcut(event: InputEventKey) -> bool:
+	if not event.shift_pressed or task_force_motions.is_empty():
+		return false
+	var preset_index: int = TacticalUiContract.TASK_FORCE_SHORTCUTS.find(event.physical_keycode)
+	if preset_index < 0:
+		preset_index = TacticalUiContract.TASK_FORCE_SHORTCUTS.find(event.keycode)
+	if preset_index < 0:
+		preset_index = TacticalUiContract.TASK_FORCE_KEYPAD_SHORTCUTS.find(event.keycode)
+	if preset_index < 0 or preset_index > 3:
+		return false
+	var shape: TaskForce.FormationShape = TaskForce.FormationShape.LINE if preset_index < 2 else TaskForce.FormationShape.SWARM
+	var spacing: TaskForce.FormationSpacing = TaskForce.FormationSpacing.TIGHT if preset_index % 2 == 0 else TaskForce.FormationSpacing.LOOSE
+	_set_task_force_formation(shape, spacing)
+	_update_status()
+	return true
+
+
+func _rejoin_task_force_members() -> bool:
+	var rejoined_any: bool = false
+	for force: TaskForce in task_force_registry.get_forces(0):
+		var motion: TaskForceMotion = _get_motion_for_force(force)
+		if motion == null:
+			continue
+		for unit: TacticalUnitScene in force.members:
+			if force.get_member_status(unit) == TaskForce.PhysicalStatus.DETACHED:
+				rejoined_any = motion.rejoin_member(unit) or rejoined_any
+	if rejoined_any:
+		_update_status()
+		queue_redraw()
+	return rejoined_any
+
+
 func _handle_task_force_demo_key(keycode: int) -> bool:
 	if task_force_demo_forces.is_empty() or task_force_demo_motions.is_empty():
 		return false
 	if keycode == KEY_1 or keycode == KEY_KP_1:
-		_set_task_force_demo_formation(TaskForce.FormationShape.LINE, TaskForce.FormationSpacing.TIGHT)
+		_set_task_force_formation(TaskForce.FormationShape.LINE, TaskForce.FormationSpacing.TIGHT)
 	elif keycode == KEY_2 or keycode == KEY_KP_2:
-		_set_task_force_demo_formation(TaskForce.FormationShape.LINE, TaskForce.FormationSpacing.LOOSE)
+		_set_task_force_formation(TaskForce.FormationShape.LINE, TaskForce.FormationSpacing.LOOSE)
 	elif keycode == KEY_3 or keycode == KEY_KP_3:
-		_set_task_force_demo_formation(TaskForce.FormationShape.SWARM, TaskForce.FormationSpacing.TIGHT)
+		_set_task_force_formation(TaskForce.FormationShape.SWARM, TaskForce.FormationSpacing.TIGHT)
 	elif keycode == KEY_4 or keycode == KEY_KP_4:
-		_set_task_force_demo_formation(TaskForce.FormationShape.SWARM, TaskForce.FormationSpacing.LOOSE)
+		_set_task_force_formation(TaskForce.FormationShape.SWARM, TaskForce.FormationSpacing.LOOSE)
 	elif keycode == KEY_G:
 		for motion: TaskForceMotion in task_force_demo_motions:
 			motion.issue_move_order(motion.anchor_position + Vector2(2600.0, 0.0))
@@ -3989,6 +4442,13 @@ func _handle_task_force_demo_key(keycode: int) -> bool:
 
 
 func _handle_task_force_demo_key_event(event: InputEventKey) -> bool:
+	var number_index: int = TacticalUiContract.TASK_FORCE_SHORTCUTS.find(event.physical_keycode)
+	if number_index < 0:
+		number_index = TacticalUiContract.TASK_FORCE_SHORTCUTS.find(event.keycode)
+	if number_index < 0:
+		number_index = TacticalUiContract.TASK_FORCE_KEYPAD_SHORTCUTS.find(event.keycode)
+	if number_index >= 0 and not event.shift_pressed:
+		return false
 	if _handle_task_force_demo_key(event.keycode):
 		return true
 	return (
@@ -3997,15 +4457,17 @@ func _handle_task_force_demo_key_event(event: InputEventKey) -> bool:
 	)
 
 
-func _set_task_force_demo_formation(
+func _set_task_force_formation(
 	shape: TaskForce.FormationShape,
 	spacing: TaskForce.FormationSpacing
 ) -> void:
 	var selected_force: TaskForce = _get_selected_task_force()
 	if selected_force != null:
-		_get_motion_for_force(selected_force).set_formation(shape, spacing)
+		var selected_motion := _get_motion_for_force(selected_force)
+		if selected_motion != null:
+			selected_motion.set_formation(shape, spacing)
 	else:
-		for motion: TaskForceMotion in task_force_demo_motions:
+		for motion: TaskForceMotion in task_force_motions.values():
 			motion.set_formation(shape, spacing)
 
 
@@ -4013,17 +4475,22 @@ func _update_task_force_demo_header() -> void:
 	if task_force_demo_forces.size() < 3 or task_force_demo_motions.size() < 3:
 		return
 	objective_label.text = (
-		"FORMATIONS TF  •  HAUT 4  •  MILIEU 6  •  BAS 10  •  G MOUVEMENT PARALLÈLE  •  CLIC TF  •  CTRL+CLIC MICRO  •  1–4 FORME  •  R RATTACHE"
+		"FORMATIONS TF  •  HAUT 4  •  MILIEU 6  •  BAS 10  •  G MOUVEMENT PARALLÈLE  •  CLIC TF  •  CTRL+CLIC MICRO  •  1–3 TF  •  MAJ+1–4 FORME  •  R RATTACHE"
 	)
 
 
-func _draw_task_force_demo_slots() -> void:
-	if not task_force_demo or task_force_demo_motions.is_empty():
+func _draw_task_force_slots() -> void:
+	if task_force_motions.is_empty():
 		return
-	for force_index: int in task_force_demo_motions.size():
+	var forces: Array[TaskForce] = task_force_registry.get_forces(0)
+	for force_index: int in forces.size():
+		var force: TaskForce = forces[force_index]
+		var motion: TaskForceMotion = task_force_motions.get(force.task_force_id)
+		if motion == null:
+			continue
 		_draw_task_force_demo_motion(
-			task_force_demo_forces[force_index],
-			task_force_demo_motions[force_index],
+			force,
+			motion,
 			Color("70e6ff") if force_index == 0 else Color("ffbd48")
 		)
 
@@ -4133,7 +4600,7 @@ func _draw() -> void:
 	draw_rect(Rect2(WORLD_RECT.position, Vector2(edge_width, WORLD_RECT.size.y)), WORLD_EDGE_FILL)
 	draw_rect(Rect2(Vector2(WORLD_RECT.end.x - edge_width, WORLD_RECT.position.y), Vector2(edge_width, WORLD_RECT.size.y)), WORLD_EDGE_FILL)
 	draw_rect(WORLD_RECT, WORLD_BORDER_COLOR, false, TacticalPresentation.stroke_width(4.0, zoom_value))
-	_draw_task_force_demo_slots()
+	_draw_task_force_slots()
 
 
 func _draw_grid(spacing: float, alpha: float) -> void:

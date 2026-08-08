@@ -576,6 +576,19 @@ bataille représentative.
 
 ## 21. Livraison incrémentale
 
+### Lot 0 — Contrats IHM
+
+- registre explicite des Task Forces jouables, distinct des groupes de capteurs ;
+- état de sélection partagé entre carte, futurs raccourcis TF et roster ;
+- snapshots typés d'unité et de Task Force, sans nouvelle source de vérité ;
+- causes de blocage typées et vocabulaire commun ;
+- politique de présentation exigeant une connaissance joueur explicite ;
+- chiffres `1–4` réservés à la sélection des TF et `Maj+1–4` aux formations.
+
+Point de contrôle : ces contrats sont testables sans panneau visible, une
+escarmouche dérive ses TF des groupes choisis au déploiement et aucune règle de
+capteur ou de réseau n'est déplacée dans l'IHM.
+
 ### Lot A — Cadre et densité
 
 - plein écran fenêtré ;
@@ -618,6 +631,7 @@ consulter le README.
 
 - alertes critiques ;
 - journal d'événements compact ;
+- filtrage des contacts hostiles et de la télémétrie selon les connaissances du joueur ;
 - amélioration de la lisibilité des états ;
 - validation en bataille chargée ;
 - corrections de chevauchements et de redimensionnement.

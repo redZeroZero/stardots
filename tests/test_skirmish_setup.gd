@@ -76,6 +76,38 @@ func _run() -> void:
 			failures.append("la composition n'est pas mémorisée pour rejouer")
 		elif int(battle.skirmish_deployment_snapshot[0].get("group_id", -1)) != 2:
 			failures.append("le groupe tactique n'est pas mémorisé avec le déploiement")
+		var player_forces: Array[TaskForce] = battle.task_force_registry.get_forces(0)
+		if player_forces.size() != 1 or player_forces[0].task_force_id != 2:
+			failures.append("le registre ne dérive pas la Task Force jouable du groupe déployé")
+		elif battle.task_force_registry.get_force_for_unit(blue) != player_forces[0]:
+			failures.append("le registre ne retrouve pas la Task Force d'un bâtiment")
+		elif battle.task_force_motions.get(player_forces[0].task_force_id) == null:
+			failures.append("le jeu normal ne crée pas de motion pour la Task Force")
+		else:
+			battle.selection_start = blue.global_position
+			battle.selection_end = blue.global_position
+			battle._finish_selection(false)
+			if battle.selection_state.selected_task_force != player_forces[0]:
+				failures.append("un clic sur un bâtiment normal ne récupère pas sa Task Force")
+			var formation_event := InputEventKey.new()
+			formation_event.pressed = true
+			formation_event.shift_pressed = true
+			formation_event.physical_keycode = KEY_3
+			battle._unhandled_input(formation_event)
+			if player_forces[0].formation_shape != TaskForce.FormationShape.SWARM:
+				failures.append("Maj+3 ne change pas la formation TFG du jeu normal")
+			battle.selection_start = blue.global_position
+			battle.selection_end = blue.global_position
+			battle._finish_selection(false, true)
+			battle._issue_move_order(blue.global_position + Vector2(300.0, 120.0))
+			if blue.navigation_route.is_empty() or player_forces[0].get_member_status(blue) != TaskForce.PhysicalStatus.DETACHED:
+				failures.append("une micro Ctrl ne reçoit pas d'ordre individuel hors TF")
+			var rejoin_event := InputEventKey.new()
+			rejoin_event.pressed = true
+			rejoin_event.keycode = KEY_R
+			battle._unhandled_input(rejoin_event)
+			if player_forces[0].get_member_status(blue) == TaskForce.PhysicalStatus.DETACHED:
+				failures.append("R ne rattache pas le membre détaché dans le jeu normal")
 		if red.intel_state != TacticalUnit.IntelState.HIDDEN:
 			failures.append("le camp rouge reste révélé après le lancement")
 		battle.ai_decision_remaining = 0.0

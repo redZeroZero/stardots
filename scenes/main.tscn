@@ -17,10 +17,15 @@ corner_radius_top_left = 4
 corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
-content_margin_left = 8.0
-content_margin_top = 5.0
-content_margin_right = 8.0
-content_margin_bottom = 5.0
+content_margin_left = 6.0
+content_margin_top = 4.0
+content_margin_right = 6.0
+content_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hud_base"]
+bg_color = Color(0.012, 0.028, 0.05, 1)
+border_width_top = 1
+border_color = Color(0.32, 0.72, 0.86, 0.5)
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -144,10 +149,12 @@ theme_override_font_sizes/font_size = 13
 
 [node name="StatusLabel" type="Label" parent="Interface/TopMargin/Panel/Content"]
 unique_name_in_owner = true
+visible = false
 text = "Simulation initialisée — tick 0"
 vertical_alignment = 1
 
 [node name="SeparatorA" type="VSeparator" parent="Interface/TopMargin/Panel/Content"]
+visible = false
 
 [node name="IntelLabel" type="Label" parent="Interface/TopMargin/Panel/Content"]
 unique_name_in_owner = true
@@ -168,13 +175,60 @@ custom_minimum_size = Vector2(72, 0)
 text = "INFOS [I]"
 tooltip_text = "Afficher la télémétrie et l'aide"
 
+[node name="EventLogButton" type="Button" parent="Interface/TopMargin/Panel/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(66, 0)
+text = "JOURNAL [L]"
+tooltip_text = "Afficher ou masquer le journal tactique compact"
+
+[node name="AlertMargin" type="MarginContainer" parent="Interface"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -440.0
+offset_top = 190.0
+offset_right = -12.0
+offset_bottom = 226.0
+
+[node name="Panel" type="PanelContainer" parent="Interface/AlertMargin"]
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
+
+[node name="AlertLabel" type="Label" parent="Interface/AlertMargin/Panel"]
+unique_name_in_owner = true
+theme_override_font_sizes/font_size = 11
+text = ""
+vertical_alignment = 1
+clip_text = true
+
+[node name="EventLogMargin" type="MarginContainer" parent="Interface"]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -420.0
+offset_top = -344.0
+offset_right = -12.0
+offset_bottom = -220.0
+z_index = 1
+
+[node name="Panel" type="PanelContainer" parent="Interface/EventLogMargin"]
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
+
+[node name="EventLogLabel" type="Label" parent="Interface/EventLogMargin/Panel"]
+unique_name_in_owner = true
+theme_override_font_sizes/font_size = 11
+text = "JOURNAL TACTIQUE"
+autowrap_mode = 0
+clip_text = true
+
 [node name="SecondaryInfo" type="PanelContainer" parent="Interface"]
 unique_name_in_owner = true
 visible = false
 offset_left = 12.0
 offset_top = 56.0
-offset_right = 640.0
-offset_bottom = 132.0
+offset_right = 720.0
+offset_bottom = 250.0
 theme_override_font_sizes/font_size = 12
 theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
 
@@ -186,60 +240,82 @@ unique_name_in_owner = true
 text = "TÉLÉMÉTRIE: EN ATTENTE"
 
 [node name="Scope" type="Label" parent="Interface/SecondaryInfo/Content"]
-text = "DROIT: ORDRE  •  CTRL+DROIT: CAMÉRA  •  ALT+DROIT: TRAVERSER  •  A: TIR  •  W: ARME  •  D: DOCTRINE  •  V: ZONES"
+text = "AIDE ALPHA\nClic / cadre : sélectionner  •  clic droit : déplacer\nS : capteur  •  A puis clic : mission de feu\nW : arme  •  D : doctrine  •  V : zones  •  F11 : affichage\nCtrl + clic droit : caméra  •  Alt + clic droit : traverser\nLes motifs de blocage apparaissent sur la mission sélectionnée."
+autowrap_mode = 0
+
+[node name="BottomHudBand" type="Panel" parent="Interface"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -112.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud_base")
 
 [node name="SelectionDock" type="MarginContainer" parent="Interface"]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 12.0
-offset_top = -220.0
+offset_top = -104.0
 offset_right = 1120.0
-offset_bottom = -12.0
+offset_bottom = -8.0
+z_index = 1
 
 [node name="Panel" type="PanelContainer" parent="Interface/SelectionDock"]
 theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
 
 [node name="Content" type="VBoxContainer" parent="Interface/SelectionDock/Panel"]
-theme_override_constants/separation = 6
-theme_override_font_sizes/font_size = 13
+theme_override_constants/separation = 1
+theme_override_font_sizes/font_size = 10
 
 [node name="SelectionDetailsLabel" type="Label" parent="Interface/SelectionDock/Panel/Content"]
 unique_name_in_owner = true
 text = "SÉLECTION: AUCUNE UNITÉ"
-size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 20)
+autowrap_mode = 2
+clip_text = true
+
+[node name="RosterList" type="HBoxContainer" parent="Interface/SelectionDock/Panel/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+theme_override_constants/separation = 4
+theme_override_font_sizes/font_size = 10
 
 [node name="SystemsControls" type="HBoxContainer" parent="Interface/SelectionDock/Panel/Content"]
 theme_override_constants/separation = 6
 
 [node name="CutEnginesButton" type="Button" parent="Interface/SelectionDock/Panel/Content/SystemsControls"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
 text = "MOTEURS: COUPER [X]"
 
 [node name="AttackModeButton" type="Button" parent="Interface/SelectionDock/Panel/Content/SystemsControls"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
 text = "ATTAQUE [A]"
 tooltip_text = "Créer une mission de feu qui attend une cible et une solution valides sans déplacer les unités ; Échap annule la mission sélectionnée"
 
-[node name="FireControls" type="HBoxContainer" parent="Interface/SelectionDock/Panel/Content"]
-theme_override_constants/separation = 6
-
-[node name="WeaponSelectButton" type="Button" parent="Interface/SelectionDock/Panel/Content/FireControls"]
+[node name="WeaponSelectButton" type="Button" parent="Interface/SelectionDock/Panel/Content/SystemsControls"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
 text = "ARME: AUTO [W]"
 tooltip_text = "Choisir l'armement offensif autorisé pour le prochain ordre"
 
-[node name="FireDoctrineButton" type="Button" parent="Interface/SelectionDock/Panel/Content/FireControls"]
+[node name="FireDoctrineButton" type="Button" parent="Interface/SelectionDock/Panel/Content/SystemsControls"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
 text = "FEU: SALVE [D]"
 tooltip_text = "Économie: un seul tireur; salve: un tir par unité; saturation: toutes les armes et cellules prêtes"
 
 [node name="SensorModeButton" type="Button" parent="Interface/SelectionDock/Panel/Content/SystemsControls"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
 text = "CAPTEUR: PASSIF [S]"
 
 [node name="ThermalModeButton" type="Button" parent="Interface/SelectionDock/Panel/Content/SystemsControls"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
 disabled = true
 text = "THERMIQUE: AUTO"
 tooltip_text = "Silencieux à l'arrêt, normal en mouvement, combat sous menace"
@@ -279,6 +355,32 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(162, 162)
 mouse_filter = 0
 script = ExtResource("2_minimap")
+
+[node name="TaskForceBarMargin" type="MarginContainer" parent="Interface"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -440.0
+offset_top = 56.0
+offset_right = -196.0
+offset_bottom = 184.0
+
+[node name="Panel" type="PanelContainer" parent="Interface/TaskForceBarMargin"]
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
+
+[node name="TaskForceList" type="VBoxContainer" parent="Interface/TaskForceBarMargin/Panel"]
+unique_name_in_owner = true
+theme_override_constants/separation = 3
+theme_override_font_sizes/font_size = 11
+
+[node name="Title" type="Label" parent="Interface/TaskForceBarMargin/Panel/TaskForceList"]
+text = "TASK FORCES"
+theme_override_font_sizes/font_size = 11
+
+[node name="FormationPresetList" type="HBoxContainer" parent="Interface/TaskForceBarMargin/Panel/TaskForceList"]
+unique_name_in_owner = true
+theme_override_constants/separation = 2
+theme_override_font_sizes/font_size = 10
 
 [node name="RestartMargin" type="MarginContainer" parent="Interface"]
 anchors_preset = 3

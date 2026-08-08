@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="WeaponSystemProfile" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://src/config/weapon_system_profile.gd" id="1_system"]
-[ext_resource type="Resource" path="res://data/weapon_mounts/forward_fixed.tres" id="2_mount"]
+[ext_resource type="Resource" path="res://data/weapon_mounts/railgun_fixed.tres" id="2_mount"]
 
 [resource]
 script = ExtResource("1_system")
@@ -15,7 +15,7 @@ loader_count = 1
 ammunition_capacity = 20
 reload_time = 1.8
 minimum_range = 80.0
-maximum_range = 650.0
+maximum_range = 1300.0
 fire_interval = 1.8
 heat_per_shot = 7.0
 damage = 34.0

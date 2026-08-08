@@ -31,6 +31,7 @@ func _run() -> void:
 		failures.append("le bandeau n'explique pas comment lancer les trois TF")
 	var swarm_event := InputEventKey.new()
 	swarm_event.pressed = true
+	swarm_event.shift_pressed = true
 	# La position physique de 3 doit fonctionner également sur AZERTY.
 	swarm_event.keycode = KEY_QUOTEDBL
 	swarm_event.physical_keycode = KEY_3
@@ -53,6 +54,15 @@ func _run() -> void:
 				failures.append("l'enveloppe orange d'une TF reste découpée")
 			if group.passive_sensor.contours.size() != 1:
 				failures.append("l'enveloppe bleue d'une TF reste découpée")
+	var select_second_event := InputEventKey.new()
+	select_second_event.pressed = true
+	select_second_event.keycode = KEY_AMPERSAND
+	select_second_event.physical_keycode = KEY_2
+	battle._unhandled_input(select_second_event)
+	if battle.selection_state.selected_task_force != battle.task_force_demo_forces[1]:
+		failures.append("la touche 2 ne sélectionne pas la deuxième Task Force")
+	elif battle.selected_units.size() != 6:
+		failures.append("le raccourci TF ne synchronise pas les six bâtiments sélectionnés")
 
 	var first_force: TaskForce = battle.task_force_demo_forces[0]
 	var first_motion: TaskForceMotion = battle.task_force_demo_motions[0]

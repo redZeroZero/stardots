@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="WeaponMountProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/config/weapon_mount_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+display_name = "Batterie railgun avant fixe"
+arc_preset = 0
+arc_center_degrees = 0.0
+arc_width_degrees = 45.0

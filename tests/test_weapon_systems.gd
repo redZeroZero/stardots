@@ -83,6 +83,10 @@ func _test_short_interceptor(failures: Array[String]) -> void:
 func _test_railgun(failures: Array[String]) -> void:
 	var battle = _empty_battle()
 	var railgun: WeaponSystemProfile = load("res://data/weapons/medium_railgun.tres")
+	if not is_equal_approx(railgun.maximum_range, 1300.0):
+		failures.append("la portée du railgun moyen n'est pas doublée")
+	if railgun.mount_profile == null or not is_equal_approx(railgun.mount_profile.arc_width_degrees, 45.0):
+		failures.append("l'arc du railgun moyen n'est pas resserré")
 	var launcher: TacticalUnit = battle._spawn_unit("RAIL", 0, Vector2.ZERO, _unit_profile_with(railgun))
 	var target: TacticalUnit = battle._spawn_unit("CIBLE", 1, Vector2(0.0, -200.0), _unit_profile_with(railgun))
 	target.set_intel_state(TacticalUnit.IntelState.TRACKED)

@@ -7,6 +7,7 @@ signal clear_requested
 signal launch_requested
 
 var entries: Array[Dictionary] = []
+var validation_error: String = ""
 
 @onready var team_option: OptionButton = %DeploymentTeamOption
 @onready var group_option: OptionButton = %DeploymentGroupOption
@@ -57,9 +58,15 @@ func get_selected_ship_id() -> String:
 
 
 func update_counts(blue_count: int, red_count: int) -> void:
+	validation_error = ""
 	var mode_text := "TEST LIBRE" if blue_count > 0 and red_count == 0 else "BATAILLE"
 	deployment_status_label.text = "%s  •  BLEU %d  •  ROUGE %d" % [mode_text, blue_count, red_count]
 	launch_button.disabled = blue_count == 0
+
+
+func set_validation_error(message: String) -> void:
+	validation_error = message
+	deployment_status_label.text = message.to_upper()
 
 
 func set_has_selection(has_selection: bool) -> void:
